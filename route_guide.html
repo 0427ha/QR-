@@ -71,6 +71,9 @@
                     경로 검색 및 내비게이션 준비
                 </button>
             </div>
+            <button id="demo-move-button" class="w-full mt-4 px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hidden" disabled>
+                ➡️ 시연: 다음 지점으로 강제 이동
+            </button>
         </div>
 
         <div class="card p-6 rounded-xl">
@@ -160,9 +163,9 @@
         let isNavigating = false; 
         let gpsWatchId = null; 
         let userGpsPosition = null; 
-        const DISTANCE_THRESHOLD = 5; // 미터 단위, 다음 노드로 전환할 최소 근접 거리 (5m로 조정)
+        const DISTANCE_THRESHOLD = 5; // 미터 단위, 다음 노드로 전환할 최소 근접 거리 (5m)
 
-        // **수정 추가**: 현실적인 예상 시간을 위한 평균 속도 정의 (5km/h)
+        // **현실적인 예상 시간을 위한 평균 속도 정의 (5km/h)**
         const AVERAGE_SPEED_MPS = 5000 / 3600; // 5 km/h ≈ 1.39 m/s 
 
         // DOM 요소 캐싱
@@ -177,6 +180,7 @@
         const canvas = document.getElementById('route-map');
         const ctx = canvas.getContext('2d');
         const navInstruction = document.getElementById('nav-next-instruction');
+        const demoMoveButton = document.getElementById('demo-move-button'); // 시연 버튼 (사용하지 않음)
 
         // Lat/Lon -> Canvas 좌표 변환을 위한 맵 경계 계산
         const mapBounds = {
@@ -215,27 +219,22 @@
          * 위경도 좌표를 Canvas의 픽셀 좌표로 변환합니다.
          */
         function latLonToCanvas(lat, lon) {
-            // Lat/Lon 범위가 너무 작을 경우, 맵 드로잉 시 확대를 위해 작은 상수 값을 더해 줌
             const latRange = (mapBounds.maxLat - mapBounds.minLat) || 0.0000001; 
             const lonRange = (mapBounds.maxLon - mapBounds.minLon) || 0.0000001; 
             
-            const padding = 0.1; // 맵 여백을 위한 비율
+            const padding = 0.1; 
             const drawWidth = canvas.width * (1 - 2 * padding);
             const drawHeight = canvas.height * (1 - 2 * padding);
             const offsetX = canvas.width * padding;
             const offsetY = canvas.height * padding;
 
-            // X 좌표 계산 (경도 - 동서)
             const x = ((lon - mapBounds.minLon) / lonRange) * drawWidth + offsetX;
-            
-            // Y 좌표 계산 (위도 - 남북)
-            // 지도의 위쪽이 작은 Y값(북쪽)이 되도록 뒤집습니다.
             const y = drawHeight - (((lat - mapBounds.minLat) / latRange) * drawHeight) + offsetY;
             
             return { x, y };
         }
         
-        // --- GPS 위치 추적 로직 (변경 없음) ---
+        // --- GPS 위치 추적 로직 (활성화) ---
 
         /**
          * GPS 위치 추적을 시작합니다.
@@ -255,9 +254,9 @@
                 handleGpsSuccess, 
                 handleGpsError, 
                 {
-                    enableHighAccuracy: true, // 높은 정확도 요구
+                    enableHighAccuracy: true, 
                     timeout: 5000, 
-                    maximumAge: 0 // 캐시된 위치 대신 최신 위치를 요청
+                    maximumAge: 0 
                 }
             );
             updateGpsStatus("ok", "GPS 추적 시작. 위치 권한을 승인하고 이동하세요.");
@@ -324,7 +323,6 @@
             }
 
             const currentStep = lastRouteData.steps[currentStepIndex];
-            // 현재 단계의 목표 지점 (다음 노드)
             const targetAreaId = currentStep.to_area;
             const targetGps = AREA_COORDINATES[targetAreaId];
             
@@ -465,7 +463,7 @@
             });
         }
 
-        // --- 경로 검색 (Dijkstra, 변경 없음) ---
+        // --- 경로 검색 (Dijkstra) ---
 
         function findOptimalRoute(startNode, endNode) {
             const distances = {};
@@ -520,20 +518,16 @@
             while (currentNode) {
                 path.unshift(currentNode);
                 currentNode = previousNodes[currentNode];
-                // Dijkstra는 시작 노드만 따로 예외 처리할 필요 없이 루프를 돌지만,
-                // 이전에 구현된 로직을 유지하기 위해 (startNode가 previousNodes에 없는 경우를 대비)
                  if (currentNode === startNode) { 
                     path.unshift(startNode);
                     break;
                  }
-                 if (!currentNode && path[0] === startNode) break; // 시작 노드에서 멈췄을 때
-                 if (!currentNode && path.length > 0) break; // 경로가 연결되지 않은 경우
-                 if (!currentNode) break; // 시작 노드에 도달하지 못한 경우
+                 if (!currentNode && path[0] === startNode) break; 
+                 if (!currentNode && path.length > 0) break; 
+                 if (!currentNode) break; 
             }
 
-            // 경로 복원 후 재확인
             if (path[0] !== startNode || path[path.length - 1] !== endNode) {
-                // 다익스트라가 경로를 찾지 못했거나 시작 노드를 포함하지 않은 경우
                 return { total_time_min: Infinity, optimal_path_areas: [] };
             }
             
@@ -567,7 +561,7 @@
                     "from_area": from_area,
                     "to_area": to_area,
                     "distance_m": distance,
-                    "travel_time_min": time, // UI에 표시할 예상 시간은 동적 계산되지만, 총 시간 계산을 위해 유지
+                    "travel_time_min": time, 
                     "turn_type": final_turn_type,
                     "detailed_instruction": final_instruction
                 });
@@ -576,13 +570,13 @@
             return { steps: steps, total_distance_m: totalDistance, total_time_min: totalTime };
         }
         
-        // --- 주요 로직 함수 (변경 없음) ---
+        // --- 주요 로직 함수 ---
 
         /**
          * 경로 검색 및 내비게이션 데이터 준비
          */
         function startRouteGuidance() {
-            if (isNavigating) stopNavigation(); // 기존 내비게이션 중지
+            if (isNavigating) stopNavigation(); 
 
             const startId = startSelect.value;
             const endId = endSelect.value;
@@ -593,11 +587,9 @@
                 return;
             }
 
-            // UI 상태 업데이트
             searchButton.disabled = true;
             searchButton.innerText = '경로 계산 중...';
 
-            // 1. 최적 경로 계산
             const { total_time_min, optimal_path_areas } = findOptimalRoute(startId, endId);
             
             if (total_time_min === Infinity) {
@@ -608,14 +600,13 @@
                 return;
             }
 
-            // 2. 상세 안내 단계 생성
             const { steps, total_distance_m } = createRouteGuidance(optimal_path_areas, total_time_min);
             
             lastRouteData = {
                 start_area_id: startId,
                 end_area_id: endId,
                 optimal_path_areas: optimal_path_areas,
-                total_time_min: Math.ceil(total_time_min), // 총 시간은 분 단위로 올림하여 표시
+                total_time_min: Math.ceil(total_time_min), 
                 total_distance_m: total_distance_m,
                 steps: steps
             };
@@ -663,12 +654,12 @@
             navControlButton.classList.remove('bg-green-500');
             navControlButton.classList.add('bg-yellow-500');
             
-            // GPS 추적 시작 (실제 위치 업데이트가 여기서부터 시작)
-            startGpsTracking();
+            // **실제 GPS 추적 시작 (HTTPS 환경에서 실행 시 권한 요청 발생)**
+            startGpsTracking(); 
 
             // 시작 시 현재 단계 정보 업데이트 (첫 번째 단계)
             if (currentStepIndex < lastRouteData.steps.length) {
-                // 초기 거리와 시간은 GPS 업데이트를 통해 곧 계산될 것이므로 0으로 설정
+                // GPS 업데이트를 기다리는 동안 초기 거리 0으로 설정
                 updateNavigationBar(lastRouteData.steps[currentStepIndex], 0); 
                 highlightStep(currentStepIndex);
             }
@@ -683,7 +674,7 @@
             navControlButton.classList.remove('bg-yellow-500');
             navControlButton.classList.add('bg-green-500');
             
-            // GPS 추적 중지
+            // **GPS 추적 중지**
             stopGpsTracking();
         }
 
@@ -691,7 +682,7 @@
          * 최종 도착 처리
          */
         function handleArrival() {
-            stopNavigation(); // GPS 추적 중지
+            stopNavigation(); 
             navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
             document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
             navControlButton.innerText = '경로 재설정';
@@ -768,12 +759,12 @@
         }
         
         /**
-         * 네비게이션 바를 업데이트합니다. (가장 중요한 수정 부분)
+         * 네비게이션 바를 업데이트합니다. (거리 기반 동적 시간 계산)
          */
         function updateNavigationBar(step, distanceToTarget) {
             navInstruction.textContent = step.detailed_instruction;
             
-            // **수정된 로직**: 남은 거리를 기반으로 동적 남은 시간 계산
+            // **핵심 로직**: 남은 거리를 기반으로 동적 남은 시간 계산
             const remainingTimeSeconds = distanceToTarget / AVERAGE_SPEED_MPS; // 초 단위
             const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds / 60)); // 최소 1분, 분 단위로 올림
 
@@ -822,7 +813,7 @@
             lucide.createIcons();
         }
         
-        // --- 초기화 및 이벤트 리스너 (변경 없음) ---
+        // --- 초기화 및 이벤트 리스너 ---
 
         function populateAreaSelects() {
             AREA_IDS.forEach(id => {
