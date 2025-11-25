@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실제 GPS 기반 내비게이션 시뮬레이션 (QR 코드 맵 이동)</title>
+    <title>실제 GPS 기반 내비게이션 시뮬레이션 (3x3 격자 맵)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -47,7 +47,7 @@
 <body class="p-4 sm:p-8">
     <div class="container mx-auto pb-32">
         <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">
-            🛰️ 실제 GPS 기반 내비게이션 (QR 시연)
+            🛰️ 실제 GPS 기반 내비게이션 (3x3 격자 맵 시연)
         </h1>
 
         <div class="card p-6 rounded-xl mb-6">
@@ -109,49 +109,81 @@
     <script>
         // --- 지도 및 경로 데이터 정의 (실제 GPS 형식의 가상 좌표 사용) ---
         const AREA_NAMES = {
-            'A': '출발/도착 홀 (Gate A)', 'B': '보안 검색대 (Security)', 'C': '면세 구역 (Duty-Free)',
-            'D': '환승 라운지 (Transfer)', 'E': '탑승 게이트 (Gate E)', 'F': '실외 주차장 (Parking Lot)',
-            'G': '실외 버스 터미널 (Bus Terminal)', 'H': '지하철 연결 통로 (Subway Link)'
+            'A': '1층 로비 A', 'B': '1층 중앙 홀 B', 'C': '1층 안내 데스크 C',
+            'D': '2층 미팅 룸 D', 'E': '2층 중앙 라운지 E', 'F': '2층 식당 F',
+            'G': '3층 전시관 G', 'H': '3층 휴게 공간 H', 'I': '3층 컨퍼런스 I'
         };
         const AREA_IDS = Object.keys(AREA_NAMES);
         
-        // **원본 가상 좌표**: 이 좌표를 기준으로 오프셋을 계산합니다.
+        // **확장된 가상 좌표 (3x3 격자)**: 구역 간 거리를 500m 이상이 되도록 규칙적으로 배치
         const AREA_COORDINATES = {
-            'A': { lat: 37.513400, lon: 127.058800 }, // 출발/도착 홀
-            'B': { lat: 37.513405, lon: 127.058810 }, // 보안 검색대
-            'C': { lat: 37.513415, lon: 127.058820 }, // 면세 구역
-            'D': { lat: 37.513420, lon: 127.058830 }, // 환승 라운지
-            'E': { lat: 37.513430, lon: 127.058850 }, // 탑승 게이트
-            'F': { lat: 37.513390, lon: 127.058790 }, // 실외 주차장
-            'G': { lat: 37.513410, lon: 127.058805 }, // 버스 터미널
-            'H': { lat: 37.513410, lon: 127.058835 }  // 지하철 연결 통로
+            'A': { lat: 37.510000, lon: 127.050000 }, // (1, 1)
+            'B': { lat: 37.510000, lon: 127.055500 }, // (1, 2)
+            'C': { lat: 37.510000, lon: 127.061000 }, // (1, 3)
+            'D': { lat: 37.505000, lon: 127.050000 }, // (2, 1)
+            'E': { lat: 37.505000, lon: 127.055500 }, // (2, 2)
+            'F': { lat: 37.505000, lon: 127.061000 }, // (2, 3)
+            'G': { lat: 37.500000, lon: 127.050000 }, // (3, 1)
+            'H': { lat: 37.500000, lon: 127.055500 }, // (3, 2)
+            'I': { lat: 37.500000, lon: 127.061000 }  // (3, 3)
         };
         
-        // **원본 좌표 저장**: 맵 리셋을 위해 필요합니다.
+        // **원본 좌표 저장**: 맵 리셋 및 오프셋 계산을 위해 필요합니다.
         let ORIGINAL_AREA_COORDINATES = JSON.parse(JSON.stringify(AREA_COORDINATES));
 
-        // 경로 연결 정보 (Dijkstra 계산용) - 시간(time)은 가중치로 사용되지만, UI에서는 이제 남은 거리를 기준으로 동적 계산됨.
+        // 경로 연결 정보 (Dijkstra 계산용) - 3x3 격자 형태의 연결을 구현
+        // 거리: 약 550m (수평/수직), 약 780m (대각선)
         const ALL_CONNECTIONS = [
-            // u, v, distance(m), time(min), turn, instruction (경로 가이드)
-            { u: 'A', v: 'B', distance: 16.7, time: 0.5, turn: "직진", instruction: "정면의 보안 검색대(B) 방향으로 직진합니다." },
-            { u: 'B', v: 'C', distance: 22.3, time: 0.8, turn: "우회전", instruction: "보안 검색대를 통과한 후 면세 구역(C)으로 우회전합니다." },
-            { u: 'C', v: 'D', distance: 18.0, time: 0.6, turn: "직진", instruction: "중앙 복도를 따라 환승 라운지(D)로 직진합니다." },
-            { u: 'D', v: 'E', distance: 25.1, time: 1.0, turn: "우회전", instruction: "오른쪽 탑승 게이트(E) 방향으로 우회전합니다." },
-            { u: 'A', v: 'F', distance: 25.0, time: 0.8, turn: "좌회전", instruction: "왼쪽 주차장(F) 입구로 진입합니다." },
-            { u: 'A', v: 'H', distance: 22.3, time: 0.7, turn: "직진", instruction: "지하철 연결 통로(H) 쪽으로 직진합니다." },
-            { u: 'C', v: 'H', distance: 16.7, time: 0.5, turn: "직진", instruction: "지하철 연결 통로(H) 방향으로 직진합니다." },
-            { u: 'E', v: 'G', distance: 22.3, time: 0.9, turn: "좌회전", instruction: "탑승 게이트를 지나 버스 터미널(G) 방향으로 좌회전합니다." },
+            // 수평 연결 (L/R)
+            { u: 'A', v: 'B', distance: 550, time: 7, turn: "직진", instruction: "오른쪽 중앙 홀 B 방향으로 직진" },
+            { u: 'B', v: 'C', distance: 550, time: 7, turn: "직진", instruction: "오른쪽 안내 데스크 C 방향으로 직진" },
+            { u: 'D', v: 'E', distance: 550, time: 7, turn: "직진", instruction: "오른쪽 중앙 라운지 E 방향으로 직진" },
+            { u: 'E', v: 'F', distance: 550, time: 7, turn: "직진", instruction: "오른쪽 식당 F 방향으로 직진" },
+            { u: 'G', v: 'H', distance: 550, time: 7, turn: "직진", instruction: "오른쪽 휴게 공간 H 방향으로 직진" },
+            { u: 'H', v: 'I', distance: 550, time: 7, turn: "직진", instruction: "오른쪽 컨퍼런스 I 방향으로 직진" },
             
-            // 역방향 경로도 포함 (간단화를 위해 대칭적으로 가정)
-            { u: 'B', v: 'A', distance: 16.7, time: 0.5, turn: "직진", instruction: "출발/도착 홀(A) 방향으로 직진합니다." },
-            { u: 'C', v: 'B', distance: 22.3, time: 0.8, turn: "좌회전", instruction: "면세 구역에서 보안 검색대(B) 방향으로 좌회전합니다." },
-            { u: 'D', v: 'C', distance: 18.0, time: 0.6, turn: "직진", instruction: "환승 라운지에서 면세 구역(C)으로 돌아갑니다." },
-            { u: 'E', v: 'D', distance: 25.1, time: 1.0, turn: "좌회전", instruction: "게이트(E)를 나와 환승 라운지(D) 방향으로 좌회전합니다." },
-            { u: 'F', v: 'A', distance: 25.0, time: 0.8, turn: "우회전", instruction: "홀(A)로 돌아와서 우회전합니다." },
-            { u: 'H', v: 'A', distance: 22.3, time: 0.7, turn: "직진", instruction: "홀(A) 방향으로 돌아옵니다." },
-            { u: 'H', v: 'C', distance: 16.7, time: 0.5, turn: "직진", instruction: "면세 구역(C) 방향으로 직진합니다." },
-            { u: 'G', v: 'E', distance: 22.3, time: 0.9, turn: "직진", instruction: "버스 터미널에서 탑승 게이트(E) 방향으로 직진합니다." }
+            // 수직 연결 (U/D)
+            { u: 'A', v: 'D', distance: 550, time: 7, turn: "직진", instruction: "아래층 미팅 룸 D 방향으로 이동" },
+            { u: 'B', v: 'E', distance: 550, time: 7, turn: "직진", instruction: "아래층 중앙 라운지 E 방향으로 이동" },
+            { u: 'C', v: 'F', distance: 550, time: 7, turn: "직진", instruction: "아래층 식당 F 방향으로 이동" },
+            { u: 'D', v: 'G', distance: 550, time: 7, turn: "직진", instruction: "아래층 전시관 G 방향으로 이동" },
+            { u: 'E', v: 'H', distance: 550, time: 7, turn: "직진", instruction: "아래층 휴게 공간 H 방향으로 이동" },
+            { u: 'F', v: 'I', distance: 550, time: 7, turn: "직진", instruction: "아래층 컨퍼런스 I 방향으로 이동" },
+            
+            // 대각선 연결 (예시: A-E)
+            { u: 'A', v: 'E', distance: 780, time: 10, turn: "우회전", instruction: "대각선 중앙 라운지 E 방향으로 이동" },
+            { u: 'B', v: 'D', distance: 780, time: 10, turn: "좌회전", instruction: "대각선 미팅 룸 D 방향으로 이동" },
+            { u: 'B', v: 'F', distance: 780, time: 10, turn: "우회전", instruction: "대각선 식당 F 방향으로 이동" },
+            { u: 'E', v: 'C', distance: 780, time: 10, turn: "좌회전", instruction: "대각선 안내 데스크 C 방향으로 이동" },
+            
+            // 모든 역방향 경로도 포함 (간단화를 위해 대칭적으로 가정)
+            // 주의: 모든 연결에 대해 반대 방향 연결을 추가해야 합니다. (간결화를 위해 일부만 예시로 작성하고 나머지는 코드로 처리)
         ];
+        
+        // ALL_CONNECTIONS의 역방향 연결을 자동으로 추가하는 로직
+        const reverseConnections = [];
+        ALL_CONNECTIONS.forEach(conn => {
+            const reverseTurn = (conn.turn === "우회전") ? "좌회전" : (conn.turn === "좌회전") ? "우회전" : "직진";
+            const reverseInstruction = conn.instruction.replace('오른쪽', '왼쪽').replace('아래층', '위층');
+            
+            // 역방향이 이미 있는지 확인 (중복 방지)
+            const exists = ALL_CONNECTIONS.some(
+                rConn => rConn.u === conn.v && rConn.v === conn.u
+            );
+
+            if (!exists) {
+                reverseConnections.push({
+                    u: conn.v, 
+                    v: conn.u, 
+                    distance: conn.distance, 
+                    time: conn.time, 
+                    turn: reverseTurn,
+                    instruction: reverseInstruction.replace(/방향으로 이동/g, '방향으로 돌아가기')
+                });
+            }
+        });
+        ALL_CONNECTIONS.push(...reverseConnections);
+
 
         const TURN_ICONS = {
             '직진': 'arrow-up', '우회전': 'corner-down-right', '좌회전': 'corner-down-left', '도착': 'map-pin'
@@ -163,7 +195,7 @@
         let isNavigating = false; 
         let gpsWatchId = null; 
         let userGpsPosition = null; 
-        const DISTANCE_THRESHOLD = 5; // 미터 단위, 다음 노드로 전환할 최소 근접 거리 (5m)
+        const DISTANCE_THRESHOLD = 10; // 미터 단위, 다음 노드로 전환할 최소 근접 거리 (10m)
 
         // **현실적인 예상 시간을 위한 평균 속도 정의 (5km/h)**
         const AVERAGE_SPEED_MPS = 5000 / 3600; // 5 km/h ≈ 1.39 m/s 
@@ -234,13 +266,14 @@
             const offsetX = canvas.width * padding;
             const offsetY = canvas.height * padding;
 
+            // 위도는 북쪽이 위 (픽셀 Y=0)이므로 반전
             const x = ((lon - mapBounds.minLon) / lonRange) * drawWidth + offsetX;
             const y = drawHeight - (((lat - mapBounds.minLat) / latRange) * drawHeight) + offsetY;
             
             return { x, y };
         }
         
-        // --- GPS 위치 추적 로직 (활성화) ---
+        // --- GPS 위치 추적 로직 ---
 
         /**
          * GPS 위치 추적을 시작합니다.
@@ -888,13 +921,14 @@
         // --- 초기화 및 이벤트 리스너 ---
 
         function populateAreaSelects() {
+            // AREA_IDS는 이제 A-I 9개
             AREA_IDS.forEach(id => {
                 const name = AREA_NAMES[id];
                 startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
                 endSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
             });
             startSelect.value = 'A'; 
-            endSelect.value = 'E'; 
+            endSelect.value = 'I'; // 3x3 대각선 끝으로 기본 설정 변경
         }
 
         function resizeCanvas() {
