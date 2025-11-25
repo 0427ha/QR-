@@ -263,12 +263,29 @@
          */
         function handleGpsSuccess(position) {
             const { latitude, longitude, accuracy } = position.coords;
+            
+            // 1. 사용자 GPS 위치 업데이트
             userGpsPosition = { lat: latitude, lon: longitude };
             
+            // 2. 내비게이션이 시작되고, **첫 번째 단계**일 때 가상 맵의 출발 노드 좌표를 실제 GPS 좌표로 덮어씌웁니다.
+            if (isNavigating && currentStepIndex === 0 && lastRouteData) {
+                const startAreaId = lastRouteData.start_area_id;
+                
+                // **[핵심 수정]** 가상 맵의 출발 노드 좌표를 실제 사용자 위치로 지정
+                AREA_COORDINATES[startAreaId].lat = latitude;
+                AREA_COORDINATES[startAreaId].lon = longitude;
+                
+                // 첫 위치를 받은 후 바로 다음 단계까지의 거리를 계산하도록 updateGpsPosition을 호출
+                updateGpsPosition(userGpsPosition); 
+                
+                // currentStepIndex가 0일 때만 이 로직을 실행하도록 하기 위해, currentStepIndex를 1로 증가시키지 않습니다.
+                // updateGpsPosition이 근접성을 확인하고 스스로 다음 단계로 넘어갈지 결정합니다.
+            }
+
             // GPS 상태 업데이트
             updateGpsStatus("ok", `현재 GPS 위치 수신됨. 정확도: ${Math.round(accuracy)}m`);
 
-            // 경로 안내 중일 때만 업데이트 로직 실행
+            // 경로 안내 중일 때만 업데이트 로직 실행 (첫 위치 지정 후에도 계속 업데이트)
             if (isNavigating && lastRouteData && lastRouteData.steps.length > currentStepIndex) {
                 updateGpsPosition(userGpsPosition);
             }
@@ -570,7 +587,6 @@
 
         /**
          * 경로 검색 및 내비게이션 데이터 준비
-         * **수정**: 경로 검색 후 자동으로 startNavigation()을 호출합니다.
          */
         function startRouteGuidance() {
             if (isNavigating) stopNavigation(); 
@@ -641,7 +657,6 @@
             if (isNavigating) {
                 stopNavigation();
             } else {
-                // 수동으로 재개할 때는 버튼 텍스트를 GPS 내비 시작으로 변경
                 startNavigation(false); // isAutoStart=false
             }
         }
