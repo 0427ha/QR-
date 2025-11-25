@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실제 GPS 기반 내비게이션 시뮬레이션</title>
+    <title>실제 GPS 기반 내비게이션 시뮬레이션 (QR 코드 맵 이동)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -47,7 +47,7 @@
 <body class="p-4 sm:p-8">
     <div class="container mx-auto pb-32">
         <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">
-            🛰️ 실제 GPS 기반 내비게이션
+            🛰️ 실제 GPS 기반 내비게이션 (QR 시연)
         </h1>
 
         <div class="card p-6 rounded-xl mb-6">
@@ -58,7 +58,7 @@
             <h2 class="text-xl font-bold text-gray-700 mb-4">경로 설정</h2>
             <div class="flex flex-col sm:flex-row gap-4">
                 <div class="flex-1">
-                    <label for="start-area" class="block text-sm font-medium text-gray-700 mb-1">출발 구역</label>
+                    <label for="start-area" class="block text-sm font-medium text-gray-700 mb-1">출발 구역 (QR 스캔 지점)</label>
                     <select id="start-area" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50">
                         </select>
                 </div>
@@ -115,7 +115,7 @@
         };
         const AREA_IDS = Object.keys(AREA_NAMES);
         
-        // **수정된 가상 좌표**: 거리가 현실적으로 나오도록 소수점 4자리 이하만 변경
+        // **원본 가상 좌표**: 이 좌표를 기준으로 오프셋을 계산합니다.
         const AREA_COORDINATES = {
             'A': { lat: 37.513400, lon: 127.058800 }, // 출발/도착 홀
             'B': { lat: 37.513405, lon: 127.058810 }, // 보안 검색대
@@ -127,6 +127,9 @@
             'H': { lat: 37.513410, lon: 127.058835 }  // 지하철 연결 통로
         };
         
+        // **원본 좌표 저장**: 맵 리셋을 위해 필요합니다.
+        let ORIGINAL_AREA_COORDINATES = JSON.parse(JSON.stringify(AREA_COORDINATES));
+
         // 경로 연결 정보 (Dijkstra 계산용) - 시간(time)은 가중치로 사용되지만, UI에서는 이제 남은 거리를 기준으로 동적 계산됨.
         const ALL_CONNECTIONS = [
             // u, v, distance(m), time(min), turn, instruction (경로 가이드)
@@ -183,13 +186,20 @@
             minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity
         };
         
-        AREA_IDS.forEach(id => {
-            const coord = AREA_COORDINATES[id];
-            mapBounds.minLat = Math.min(mapBounds.minLat, coord.lat);
-            mapBounds.maxLat = Math.max(mapBounds.maxLat, coord.lat);
-            mapBounds.minLon = Math.min(mapBounds.minLon, coord.lon);
-            mapBounds.maxLon = Math.max(mapBounds.maxLon, coord.lon);
-        });
+        // 초기 맵 경계 계산
+        function recalculateMapBounds() {
+            mapBounds.minLat = Infinity; mapBounds.maxLat = -Infinity; 
+            mapBounds.minLon = Infinity; mapBounds.maxLon = -Infinity;
+            
+            AREA_IDS.forEach(id => {
+                const coord = AREA_COORDINATES[id];
+                mapBounds.minLat = Math.min(mapBounds.minLat, coord.lat);
+                mapBounds.maxLat = Math.max(mapBounds.maxLat, coord.lat);
+                mapBounds.minLon = Math.min(mapBounds.minLon, coord.lon);
+                mapBounds.maxLon = Math.max(mapBounds.maxLon, coord.lon);
+            });
+        }
+        recalculateMapBounds();
 
         // --- 유틸리티 함수 ---
 
@@ -266,26 +276,11 @@
             
             // 1. 사용자 GPS 위치 업데이트
             userGpsPosition = { lat: latitude, lon: longitude };
-            
-            // 2. 내비게이션이 시작되고, **첫 번째 단계**일 때 가상 맵의 출발 노드 좌표를 실제 GPS 좌표로 덮어씌웁니다.
-            if (isNavigating && currentStepIndex === 0 && lastRouteData) {
-                const startAreaId = lastRouteData.start_area_id;
-                
-                // **[핵심 수정]** 가상 맵의 출발 노드 좌표를 실제 사용자 위치로 지정
-                AREA_COORDINATES[startAreaId].lat = latitude;
-                AREA_COORDINATES[startAreaId].lon = longitude;
-                
-                // 첫 위치를 받은 후 바로 다음 단계까지의 거리를 계산하도록 updateGpsPosition을 호출
-                updateGpsPosition(userGpsPosition); 
-                
-                // currentStepIndex가 0일 때만 이 로직을 실행하도록 하기 위해, currentStepIndex를 1로 증가시키지 않습니다.
-                // updateGpsPosition이 근접성을 확인하고 스스로 다음 단계로 넘어갈지 결정합니다.
-            }
 
             // GPS 상태 업데이트
             updateGpsStatus("ok", `현재 GPS 위치 수신됨. 정확도: ${Math.round(accuracy)}m`);
 
-            // 경로 안내 중일 때만 업데이트 로직 실행 (첫 위치 지정 후에도 계속 업데이트)
+            // 경로 안내 중일 때만 업데이트 로직 실행
             if (isNavigating && lastRouteData && lastRouteData.steps.length > currentStepIndex) {
                 updateGpsPosition(userGpsPosition);
             }
@@ -369,7 +364,7 @@
             }
         }
         
-        // --- UI 및 맵 드로잉 로직 (변경 없음) ---
+        // --- 맵 드로잉 로직 ---
 
         /**
          * 맵에 구역, 최적 경로, 사용자 위치를 시각화합니다.
@@ -583,7 +578,35 @@
             return { steps: steps, total_distance_m: totalDistance, total_time_min: totalTime };
         }
         
-        // --- 주요 로직 함수 ---
+        // --- 맵 이동 및 내비게이션 시작 로직 ---
+
+        /**
+         * 맵 전체의 좌표를 사용자의 위치 기반으로 이동시키는 함수
+         * @param {number} currentLat 현재 GPS 위도
+         * @param {number} currentLon 현재 GPS 경도
+         */
+        function applyGpsOffsetToMap(currentLat, currentLon) {
+            const startAreaId = lastRouteData.start_area_id;
+
+            // 가상 맵의 출발 지점 원본 좌표
+            const baseLat = ORIGINAL_AREA_COORDINATES[startAreaId].lat;
+            const baseLon = ORIGINAL_AREA_COORDINATES[startAreaId].lon;
+            
+            // 오프셋 계산 (실제 위치 - 가상 시작 위치)
+            const deltaLat = currentLat - baseLat;
+            const deltaLon = currentLon - baseLon;
+
+            // 모든 노드에 오프셋 적용
+            AREA_IDS.forEach(id => {
+                AREA_COORDINATES[id].lat = ORIGINAL_AREA_COORDINATES[id].lat + deltaLat;
+                AREA_COORDINATES[id].lon = ORIGINAL_AREA_COORDINATES[id].lon + deltaLon;
+            });
+
+            // 맵 경계 재계산 (Canvas 렌더링을 위해 필수)
+            recalculateMapBounds();
+            drawMap();
+        }
+
 
         /**
          * 경로 검색 및 내비게이션 데이터 준비
@@ -665,16 +688,40 @@
          * 내비게이션 시작
          */
         function startNavigation(isAutoStart = false) {
+            if (!navigator.geolocation) {
+                updateGpsStatus("error", "오류: 이 브라우저는 GPS(Geolocation)를 지원하지 않습니다.");
+                return;
+            }
+
+            if (isNavigating) return;
+
             isNavigating = true;
-            
+
             if (!isAutoStart) {
                 navControlButton.innerText = 'GPS 내비 중지';
                 navControlButton.classList.remove('bg-green-500');
                 navControlButton.classList.add('bg-yellow-500');
             }
             
-            // **실제 GPS 추적 시작**
-            startGpsTracking(); 
+            // 1. **[핵심 로직]** GPS 위치를 한 번만 요청하여 맵 오프셋 계산 및 적용
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    
+                    // 맵 이동 로직 실행: 가상 맵 전체를 현재 위치로 이동
+                    applyGpsOffsetToMap(latitude, longitude);
+
+                    // 2. 맵 좌표 이동 후, 실시간 GPS 추적을 시작합니다.
+                    startGpsTracking(); 
+                }, 
+                (error) => {
+                    // 위치 획득 실패 시, 맵 이동 없이 추적만 시작 (기존 좌표로 실행)
+                    updateGpsStatus("error", "GPS 초기 위치 획득 실패. 기존 가상 좌표로 내비게이션을 시작합니다.");
+                    startGpsTracking(); 
+                },
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+
 
             if (currentStepIndex < lastRouteData.steps.length) {
                 updateNavigationBar(lastRouteData.steps[currentStepIndex], 0); 
@@ -817,6 +864,14 @@
             isNavigating = false;
             currentStepIndex = 0;
             userGpsPosition = null;
+            
+            // **[복원]** AREA_COORDINATES를 원본으로 복원
+            AREA_IDS.forEach(id => {
+                AREA_COORDINATES[id].lat = ORIGINAL_AREA_COORDINATES[id].lat;
+                AREA_COORDINATES[id].lon = ORIGINAL_AREA_COORDINATES[id].lon;
+            });
+            recalculateMapBounds(); // 맵 경계도 원본으로 복원
+            
             drawMap();
             navBar.classList.remove('active');
             outputDiv.innerHTML = `<p class="text-gray-500">지도를 시각화하기 위해 출발지 및 도착지를 설정하고 버튼을 눌러주세요.</p>`;
