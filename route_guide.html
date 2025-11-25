@@ -2,661 +2,663 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>공항 경로 최단 경로 시뮬레이터</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>스마트 공항 내비게이션</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
-            color: #1f2937;
-        }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .card {
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            padding: 24px;
-            margin-bottom: 20px;
-        }
-        .btn-primary {
-            background-color: #3b82f6;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .btn-primary:hover {
-            background-color: #2563eb;
-        }
-        .btn-secondary {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f3f4f6;
-            color: #1f2937;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background-color 0.2s;
-            border: 1px solid #d1d5db;
+            touch-action: none; /* 지도 조작을 위해 스크롤 방지 */
+            overflow: hidden; /* 전체 화면 고정 */
         }
-        .btn-secondary:hover {
-            background-color: #e5e7eb;
-        }
-        .node-map {
-            position: relative;
-            width: 100%;
-            height: 400px;
-            background-color: #e5e7eb;
-            border-radius: 8px;
-            margin-top: 20px;
-            overflow: hidden;
-        }
-        .node {
-            position: absolute;
-            width: 50px;
-            height: 50px;
-            background-color: #10b981;
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            transition: transform 0.1s, background-color 0.2s;
-            z-index: 10;
-            text-align: center;
-            line-height: 1.2;
-        }
-        .node:hover {
-            transform: scale(1.1);
-        }
-        .selected {
-            background-color: #ef4444;
-        }
-        #result-display {
-            border-left: 4px solid #3b82f6;
-            padding-left: 16px;
-        }
-
-        /* 캔버스 스타일 */
-        #airportCanvas {
+        
+        /* 지도 컨테이너: 화면 전체 차지 */
+        #map-container {
             position: absolute;
             top: 0;
             left: 0;
-            z-index: 5;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background-color: #e5e7eb;
+        }
+        
+        /* 상단 바 */
+        #top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 10px 16px;
+            border-bottom-left-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+
+        /* 하단 패널 (설정 및 안내) */
+        #bottom-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            background: white;
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            padding: 24px 20px 30px 20px;
+            transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        
+        /* 줌 컨트롤 */
+        .zoom-controls {
+            position: absolute;
+            top: 50%;
+            right: 16px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+        }
+        
+        .zoom-btn {
+            width: 48px;
+            height: 48px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            color: #4b5563;
+            font-size: 24px;
+            transition: all 0.2s;
+        }
+        .zoom-btn:active {
+            background-color: #f3f4f6;
+            transform: scale(0.95);
+        }
+
+        /* 턴 아이콘 */
+        .turn-icon-box {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            background-color: #3b82f6;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* 애니메이션 */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(2); opacity: 0; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">공항 최단 경로 시뮬레이터</h1>
-            <p class="text-gray-500 mt-1">출발지와 도착지를 선택하고 가장 빠른 경로를 확인하세요.</p>
-        </header>
 
-        <div class="card grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            <div class="md:col-span-2">
-                <label for="startNode" class="block text-sm font-medium text-gray-700 mb-1">출발 지점</label>
-                <div class="flex space-x-2">
-                    <select id="startNode" class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                        <!-- Options will be populated by JS -->
-                    </select>
-                    <button id="getLocationBtn" class="btn-secondary whitespace-nowrap px-4 py-2 text-sm" title="브라우저 위치 API를 사용하여 현재 위치 가져오기">
-                        내 위치
-                    </button>
+    <!-- 상단 헤더 (검색 모드일 때만 표시) -->
+    <div id="top-bar" class="flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-100 p-2 rounded-full text-blue-600">
+                <i data-lucide="map-pin" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold text-slate-800">공항 실내 내비게이션</h1>
+                <p id="status-text" class="text-xs text-slate-500">경로를 설정해주세요</p>
+            </div>
+        </div>
+        <div id="gps-badge" class="px-2 py-1 rounded bg-gray-100 text-xs font-bold text-gray-400">
+            GPS 대기
+        </div>
+    </div>
+
+    <!-- 지도 영역 -->
+    <div id="map-container">
+        <canvas id="nav-canvas"></canvas>
+    </div>
+
+    <!-- 줌 컨트롤 -->
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="handleZoom(1.2)">
+            <i data-lucide="plus" class="w-6 h-6"></i>
+        </button>
+        <button class="zoom-btn" onclick="handleZoom(0.8)">
+            <i data-lucide="minus" class="w-6 h-6"></i>
+        </button>
+        <button class="zoom-btn" onclick="resetView()">
+            <i data-lucide="refresh-ccw" class="w-5 h-5"></i>
+        </button>
+    </div>
+
+    <!-- 하단 패널 -->
+    <div id="bottom-panel">
+        
+        <!-- 1. 설정 모드 (초기 화면) -->
+        <div id="setup-mode">
+            <div class="space-y-4">
+                <div class="flex gap-3">
+                    <div class="w-1/2">
+                        <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">출발지</label>
+                        <!-- QR로 인식되어도 수정 가능하도록 disabled 제거 -->
+                        <select id="start-select" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none"></select>
+                    </div>
+                    <div class="w-1/2">
+                        <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">도착지</label>
+                        <select id="end-select" class="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"></select>
+                    </div>
+                </div>
+                
+                <button onclick="calculateRoute()" id="calc-btn" class="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2 text-lg">
+                    경로 검색
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. 내비게이션 준비 모드 (경로 확인) -->
+        <div id="preview-mode" class="hidden space-y-4">
+            <div class="flex justify-between items-center pb-4 border-b border-gray-100">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium">총 예상 소요시간</p>
+                    <p class="text-2xl font-extrabold text-slate-800" id="preview-time">0분</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-500 font-medium">총 거리</p>
+                    <p class="text-lg font-bold text-slate-800" id="preview-dist">0m</p>
                 </div>
             </div>
-            <div>
-                <label for="endNode" class="block text-sm font-medium text-gray-700 mb-1">도착 지점</label>
-                <select id="endNode" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                    <!-- Options will be populated by JS -->
-                </select>
-            </div>
-            <div>
-                <button id="findPathBtn" class="w-full btn-primary">경로 찾기</button>
-            </div>
-        </div>
-        
-        <div id="locationStatus" class="text-sm mt-3 p-2 bg-yellow-100 text-yellow-800 rounded-lg hidden"></div>
-
-        <div class="card">
-            <h2 class="text-xl font-semibold mb-3">공항 노드 지도 (클릭하여 선택 가능)</h2>
-            <div class="node-map" id="nodeMap">
-                <canvas id="airportCanvas"></canvas>
-                <!-- Nodes will be inserted here by JS -->
+            <div class="flex gap-3">
+                <button onclick="cancelRoute()" class="w-1/3 py-3.5 bg-gray-100 text-gray-600 font-bold rounded-xl active:scale-95">
+                    취소
+                </button>
+                <button onclick="startNavigation()" class="w-2/3 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg active:scale-95 shadow-blue-200">
+                    안내 시작 🚀
+                </button>
             </div>
         </div>
 
-        <div class="card">
-            <h2 class="text-xl font-semibold mb-3">경로 결과</h2>
-            <div id="result-display" class="min-h-[100px]">
-                <p class="text-gray-500">출발지와 도착지를 선택한 후 '경로 찾기' 버튼을 눌러주세요.</p>
+        <!-- 3. 주행 모드 (실시간 안내) -->
+        <div id="driving-mode" class="hidden">
+            <div class="flex items-center gap-5 mb-6">
+                <!-- 턴 아이콘 -->
+                <div class="turn-icon-box shrink-0">
+                    <i id="turn-icon" data-lucide="arrow-up" class="w-8 h-8"></i>
+                </div>
+                
+                <!-- 안내 텍스트 -->
+                <div class="overflow-hidden">
+                    <h3 id="nav-instruction" class="text-xl font-bold text-slate-900 leading-tight mb-1">
+                        안내를 시작합니다
+                    </h3>
+                    <p id="nav-sub-text" class="text-base text-blue-600 font-semibold">
+                        잠시 후 이동
+                    </p>
+                </div>
             </div>
+            
+            <button onclick="stopNavigation()" class="w-full py-3 bg-white border-2 border-red-100 text-red-500 font-bold rounded-xl hover:bg-red-50 active:scale-95 transition-colors">
+                안내 종료
+            </button>
         </div>
     </div>
 
     <script>
-        // --- 1. 그래프 정의 (Graph Definition) ---
-        // 공항 노드 및 노드 간의 거리(시간) 정의 (단위: 분)
-        const nodes = {
-            'A': { name: '출발/도착 홀', x: 100, y: 300 },
-            'B': { name: '보안 검색대', x: 250, y: 300 },
-            'C': { name: '면세 구역', x: 400, y: 150 },
-            'D': { name: '환승 라운지', x: 550, y: 150 },
-            'E': { name: '탑승 게이트', x: 700, y: 300 },
-            'F': { name: '실외 주차장', x: 100, y: 100 },
-            'G': { name: '버스 터미널', x: 250, y: 100 },
-            'H': { name: '지하철 연결 통로', x: 700, y: 100 },
-            'X': { name: '내 위치 (GPS)', x: 450, y: 300, isDynamic: true } // 동적 위치 노드 추가
+        const API_BASE = 'http://127.0.0.1:5000'; // 로컬 테스트용
+        // const API_BASE = 'https://your-server-url.com'; // 실제 배포 시 변경
+
+        // 맵 데이터 (가상 좌표계 0~1000)
+        const NODES = {
+            'A': { name: '출발/도착 홀', x: 100, y: 850 },
+            'B': { name: '보안 검색대', x: 300, y: 750 },
+            'C': { name: '면세 구역', x: 500, y: 500 },
+            'D': { name: '환승 라운지', x: 700, y: 500 },
+            'E': { name: '탑승 게이트', x: 900, y: 250 },
+            'F': { name: '실외 주차장', x: 100, y: 250 },
+            'G': { name: '버스 터미널', x: 300, y: 250 },
+            'H': { name: '지하철 연결', x: 500, y: 900 }
+        };
+        
+        const EDGES = [
+            { u: 'A', v: 'B' }, { u: 'A', v: 'F' }, { u: 'A', v: 'H' },
+            { u: 'B', v: 'C' }, { u: 'C', v: 'D' }, { u: 'C', v: 'H' },
+            { u: 'D', v: 'E' }, { u: 'E', v: 'G' }, { u: 'F', v: 'G' }
+        ];
+
+        const TURN_ICONS = {
+            '직진': 'arrow-up', 
+            '우회전': 'corner-up-right', 
+            '좌회전': 'corner-up-left', 
+            '도착': 'map-pin'
         };
 
-        // 인접 리스트: {노드: {인접 노드: 거리/시간}}
-        // 예시 거리(시간) 값은 임의로 설정되었습니다. (단위: 분)
-        const graph = {
-            'A': { 'B': 5, 'F': 8, 'G': 10 },
-            'B': { 'A': 5, 'C': 7 },
-            'C': { 'B': 7, 'D': 6, 'E': 15 },
-            'D': { 'C': 6, 'E': 8 },
-            'E': { 'C': 15, 'D': 8, 'H': 5 },
-            'F': { 'A': 8, 'G': 4 },
-            'G': { 'A': 10, 'F': 4 },
-            'H': { 'E': 5 },
-            // 'X' 노드는 동적으로 가장 가까운 노드에 연결됩니다. 초기에는 비어 있습니다.
-            'X': {} 
+        // --- 상태 변수 ---
+        let ctx, canvas;
+        // 뷰포트 상태 (줌/이동)
+        let view = { x: 0, y: 0, scale: 1 };
+        let isDragging = false;
+        let lastTouch = { x: 0, y: 0 };
+
+        let routeData = null;
+        let isNavigating = false;
+        let currentStepIdx = 0;
+        let userPos = { x: 0, y: 0 }; // 캔버스 좌표계상 내 위치
+        
+        // 시뮬레이션 변수
+        let simInterval = null;
+        let simProgress = 0; // 0.0 ~ 1.0 (현재 스텝 내 진행률)
+
+        // --- 초기화 ---
+        window.onload = () => {
+            canvas = document.getElementById('nav-canvas');
+            ctx = canvas.getContext('2d');
+            
+            // 드롭다운 초기화
+            const startSel = document.getElementById('start-select');
+            const endSel = document.getElementById('end-select');
+            
+            Object.keys(NODES).forEach(key => {
+                startSel.add(new Option(`${key}. ${NODES[key].name}`, key));
+                endSel.add(new Option(`${key}. ${NODES[key].name}`, key));
+            });
+
+            // QR 코드 파라미터 처리
+            const params = new URLSearchParams(window.location.search);
+            const qrLoc = params.get('scanned_location');
+            
+            if (qrLoc && NODES[qrLoc]) {
+                startSel.value = qrLoc;
+                document.getElementById('status-text').innerText = "QR 위치 인식됨 (변경 가능)";
+                document.getElementById('status-text').className = "text-xs text-green-600 font-bold";
+            } else {
+                startSel.value = 'A';
+                endSel.value = 'E'; // 기본값
+            }
+
+            // 이벤트 리스너 (드래그/줌)
+            setupCanvasEvents();
+            window.addEventListener('resize', resizeCanvas);
+            
+            resizeCanvas();
+            resetView();
+            lucide.createIcons();
+            
+            // 렌더링 루프 시작
+            requestAnimationFrame(render);
         };
 
-        // --- 2. DOM 요소 및 변수 초기화 ---
-        const startNodeSelect = document.getElementById('startNode');
-        const endNodeSelect = document.getElementById('endNode');
-        const findPathBtn = document.getElementById('findPathBtn');
-        const getLocationBtn = document.getElementById('getLocationBtn');
-        const resultDisplay = document.getElementById('result-display');
-        const locationStatus = document.getElementById('locationStatus');
-        const nodeMap = document.getElementById('nodeMap');
-        const canvas = document.getElementById('airportCanvas');
-        const ctx = canvas.getContext('2d');
-
-        let selectedStart = null;
-        let selectedEnd = null;
-        let isLocationFetched = false;
-
-        // 캔버스 크기 설정 (부모 요소에 맞춤)
         function resizeCanvas() {
-            canvas.width = nodeMap.clientWidth;
-            canvas.height = nodeMap.clientHeight;
-            drawMap();
-        }
-        window.addEventListener('resize', resizeCanvas);
-
-        // --- 3. 유틸리티 함수: 거리 계산 및 다익스트라 구현 ---
-        
-        /**
-         * 유클리드 거리 계산 (두 지점의 픽셀 간 거리)
-         * @param {object} pos1 - {x, y}
-         * @param {object} pos2 - {x, y}
-         * @returns {number} 픽셀 거리
-         */
-        function getPixelDistance(pos1, pos2) {
-            return Math.sqrt(Math.pow(pos1.x - pos2.x, 2) + Math.pow(pos1.y - pos2.y, 2));
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
         }
 
-        /**
-         * 다익스트라 알고리즘을 사용하여 최단 경로를 찾습니다.
-         * @param {string} startNode - 시작 노드 ID
-         * @param {string} endNode - 도착 노드 ID
-         * @returns {object} {distance: number, path: string[]} 최단 거리와 경로
-         */
-        function dijkstra(startNode, endNode) {
-            const currentNodes = Object.keys(nodes).filter(id => !nodes[id].isDynamic || id === startNode);
-            const distances = {};
-            const previousNodes = {};
-            const unvisited = new Set(currentNodes);
+        function resetView() {
+            // 맵 전체가 보이도록 줌 리셋
+            view.scale = canvas.width / 1200; // 대략적인 비율
+            if (view.scale > 1) view.scale = 1;
+            if (view.scale < 0.5) view.scale = 0.5;
+            
+            // 중앙 정렬
+            view.x = (canvas.width - 1000 * view.scale) / 2;
+            view.y = (canvas.height - 1000 * view.scale) / 2;
+        }
 
-            for (let node of currentNodes) {
-                distances[node] = Infinity;
-                previousNodes[node] = null;
-            }
-            distances[startNode] = 0;
-
-            while (unvisited.size > 0) {
-                let minDistance = Infinity;
-                let currentNode = null;
-
-                for (let node of unvisited) {
-                    if (distances[node] < minDistance) {
-                        minDistance = distances[node];
-                        currentNode = node;
-                    }
-                }
-
-                if (currentNode === null || minDistance === Infinity) {
-                    break;
-                }
-
-                unvisited.delete(currentNode);
-
-                if (currentNode === endNode) {
-                    break;
-                }
-
-                if (graph[currentNode]) {
-                    for (let neighbor in graph[currentNode]) {
-                        // 현재 그래프에 포함된 노드만 고려합니다.
-                        if (currentNodes.includes(neighbor)) { 
-                            const distance = graph[currentNode][neighbor];
-                            const newDistance = distances[currentNode] + distance;
-
-                            if (newDistance < distances[neighbor]) {
-                                distances[neighbor] = newDistance;
-                                previousNodes[neighbor] = currentNode;
-                            }
-                        }
-                    }
-                }
-            }
-
-            const path = [];
-            let current = endNode;
-            while (current) {
-                path.unshift(current);
-                if (current === startNode) break;
-                current = previousNodes[current];
-            }
-
-            if (path[0] === startNode) {
-                return {
-                    distance: distances[endNode],
-                    path: path
-                };
-            } else {
-                return { distance: Infinity, path: [] };
+        function handleZoom(factor) {
+            const newScale = view.scale * factor;
+            if (newScale > 0.2 && newScale < 5) {
+                // 화면 중심 기준으로 줌
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+                view.x = cx - (cx - view.x) * factor;
+                view.y = cy - (cy - view.y) * factor;
+                view.scale = newScale;
             }
         }
 
-        // --- 4. GPS 위치 기반 처리 (Geolocation API) ---
+        // --- 캔버스 이벤트 (드래그 이동) ---
+        function setupCanvasEvents() {
+            const handleStart = (x, y) => {
+                isDragging = true;
+                lastTouch = { x, y };
+            };
+            const handleMove = (x, y) => {
+                if (!isDragging) return;
+                view.x += x - lastTouch.x;
+                view.y += y - lastTouch.y;
+                lastTouch = { x, y };
+            };
+            const handleEnd = () => { isDragging = false; };
 
-        /**
-         * 브라우저의 Geolocation API를 사용하여 현재 위치를 가져오고 'X' 노드를 설정합니다.
-         */
-        getLocationBtn.addEventListener('click', () => {
-            if (!navigator.geolocation) {
-                updateLocationStatus('error', '죄송합니다. 브라우저가 위치 정보 기능을 지원하지 않습니다.', 5000);
+            // 마우스
+            canvas.addEventListener('mousedown', e => handleStart(e.offsetX, e.offsetY));
+            canvas.addEventListener('mousemove', e => handleMove(e.offsetX, e.offsetY));
+            window.addEventListener('mouseup', handleEnd);
+
+            // 터치
+            canvas.addEventListener('touchstart', e => {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                handleStart(touch.clientX - rect.left, touch.clientY - rect.top);
+            });
+            canvas.addEventListener('touchmove', e => {
+                e.preventDefault(); // 스크롤 방지
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                handleMove(touch.clientX - rect.left, touch.clientY - rect.top);
+            });
+            window.addEventListener('touchend', handleEnd);
+        }
+
+        // --- 1단계: 경로 계산 (API 호출) ---
+        async function calculateRoute() {
+            const start = document.getElementById('start-select').value;
+            const end = document.getElementById('end-select').value;
+
+            if (start === end) return alert("출발지와 도착지가 같습니다.");
+
+            const btn = document.getElementById('calc-btn');
+            btn.disabled = true;
+            btn.innerText = "계산 중...";
+
+            try {
+                // API 호출
+                const res = await fetch(`${API_BASE}/api/route/guide?start=${start}&end=${end}`);
+                if (!res.ok) throw new Error("API Error");
+                routeData = await res.json();
+
+                if (!routeData.steps || routeData.steps.length === 0) throw new Error("경로 없음");
+
+                // UI 전환 -> 미리보기
+                document.getElementById('setup-mode').classList.add('hidden');
+                document.getElementById('preview-mode').classList.remove('hidden');
+                
+                // 요약 정보 표시
+                document.getElementById('preview-time').innerText = routeData.total_time_min + "분";
+                document.getElementById('preview-dist').innerText = routeData.total_distance_m + "m";
+
+                // 지도에서 경로가 잘 보이도록 출발지 중심으로 이동
+                const startNode = NODES[start];
+                userPos = { ...startNode }; // 내 위치 초기화
+                
+                // 카메라를 출발지로 이동
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+                view.scale = 1.2; // 약간 확대
+                view.x = cx - startNode.x * view.scale;
+                view.y = cy - startNode.y * view.scale;
+
+            } catch (e) {
+                console.error(e);
+                alert("경로를 찾을 수 없거나 서버 연결에 실패했습니다.");
+                cancelRoute();
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `경로 검색`;
+            }
+        }
+
+        function cancelRoute() {
+            routeData = null;
+            document.getElementById('setup-mode').classList.remove('hidden');
+            document.getElementById('preview-mode').classList.add('hidden');
+            resetView();
+        }
+
+        // --- 2단계: 내비게이션 시작 ---
+        function startNavigation() {
+            isNavigating = true;
+            currentStepIdx = 0;
+            simProgress = 0;
+
+            // UI 전환
+            document.getElementById('preview-mode').classList.add('hidden');
+            document.getElementById('driving-mode').classList.remove('hidden');
+            
+            // GPS 상태 업데이트
+            const badge = document.getElementById('gps-badge');
+            badge.className = "px-2 py-1 rounded bg-blue-100 text-xs font-bold text-blue-600 animate-pulse";
+            badge.innerText = "GPS 수신 중";
+
+            updateNavInstruction(); // 첫 번째 안내 표시
+            
+            // 시뮬레이션 타이머 시작 (실제 GPS 연동 시에는 이 부분을 navigator.geolocation으로 대체)
+            simInterval = setInterval(simulationLoop, 50); // 50ms마다 업데이트
+        }
+
+        function stopNavigation() {
+            isNavigating = false;
+            clearInterval(simInterval);
+            
+            // UI 복귀
+            document.getElementById('driving-mode').classList.add('hidden');
+            document.getElementById('setup-mode').classList.remove('hidden');
+            
+            const badge = document.getElementById('gps-badge');
+            badge.className = "px-2 py-1 rounded bg-gray-100 text-xs font-bold text-gray-400";
+            badge.innerText = "GPS 대기";
+            
+            resetView();
+            routeData = null;
+        }
+
+        // --- 내비게이션 로직 & 시뮬레이션 ---
+        function simulationLoop() {
+            if (!routeData || !isNavigating) return;
+
+            const steps = routeData.steps;
+            if (currentStepIdx >= steps.length) {
+                // 도착 완료
+                finishNavigation();
                 return;
             }
 
-            updateLocationStatus('info', '위치 정보를 가져오는 중...', 0);
-            getLocationBtn.disabled = true;
+            const step = steps[currentStepIdx];
+            const p1 = NODES[step.from_area];
+            const p2 = NODES[step.to_area];
 
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    // 실제 GPS 위치를 지도상의 특정 노드(예: 'A')로 근사하여 시뮬레이션 목적의 좌표를 설정합니다.
-                    // 실제 앱이라면 GPS 좌표를 내부 지도 좌표계로 변환해야 합니다.
-                    const mockX = nodes.A.x + (Math.random() - 0.5) * 50;
-                    const mockY = nodes.A.y + (Math.random() - 0.5) * 50;
+            // 진행률 증가 (속도 조절)
+            simProgress += 0.005; // 이동 속도
 
-                    // 'X' 노드 위치 업데이트 (시뮬레이션 위치)
-                    nodes.X.x = mockX;
-                    nodes.X.y = mockY;
-                    
-                    // 'X' 노드를 가장 가까운 노드에 연결하고 가중치(거리)를 계산합니다.
-                    // 여기서는 픽셀 거리를 단순화하여 시간(분)으로 변환합니다.
-                    let closestNodeId = null;
-                    let minPixelDistance = Infinity;
-                    
-                    for(const id in nodes) {
-                        if (id !== 'X' && !nodes[id].isDynamic) {
-                            const dist = getPixelDistance(nodes.X, nodes[id]);
-                            if (dist < minPixelDistance) {
-                                minPixelDistance = dist;
-                                closestNodeId = id;
-                            }
-                        }
-                    }
-                    
-                    // 픽셀 거리를 시간(분)으로 변환 (예: 1픽셀당 0.1분)
-                    const travelTime = Math.ceil(minPixelDistance * 0.1); 
-                    
-                    // 'X' 노드의 연결 상태 업데이트: 가장 가까운 노드에만 연결
-                    graph.X = {};
-                    if (closestNodeId) {
-                        graph.X[closestNodeId] = travelTime;
-                        // 양방향 경로를 위해 반대쪽도 연결합니다.
-                        // graph[closestNodeId]['X'] = travelTime; // 그래프가 무방향이 아닐 수 있으므로 일단 X -> closest만
-                    }
-
-                    isLocationFetched = true;
-                    getLocationBtn.disabled = false;
-                    
-                    // 'X' 노드를 출발지로 자동 설정
-                    document.getElementById(`node-X`)?.remove(); // 기존 노드 제거
-                    drawHTMLNodes(); // 새 'X' 노드 포함하여 다시 그리기
-                    handleAutoSelect('X');
-
-                    updateLocationStatus('success', 
-                        `내 위치(GPS)를 성공적으로 가져왔습니다. 'X' 노드가 출발지로 설정되었습니다. (가까운 노드: ${nodes[closestNodeId].name}, 이동 시간: ${travelTime}분)`, 
-                        8000
-                    );
-                },
-                (error) => {
-                    getLocationBtn.disabled = false;
-                    let message;
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            message = "위치 정보 권한이 거부되었습니다. 브라우저 설정을 확인해주세요.";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            message = "위치 정보를 사용할 수 없습니다. (실내이거나 신호 불량)";
-                            break;
-                        case error.TIMEOUT:
-                            message = "위치 정보 요청 시간이 초과되었습니다.";
-                            break;
-                        default:
-                            message = "위치 정보 가져오기 오류가 발생했습니다: " + error.message;
-                            break;
-                    }
-                    updateLocationStatus('error', message, 5000);
-                },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
-            );
-        });
-
-        // 위치 상태 메시지 업데이트 함수
-        let statusTimeout;
-        function updateLocationStatus(type, message, duration) {
-            clearTimeout(statusTimeout);
-            locationStatus.innerHTML = message;
-            locationStatus.classList.remove('hidden', 'bg-red-100', 'bg-yellow-100', 'bg-green-100', 'text-red-800', 'text-yellow-800', 'text-green-800');
-            
-            if (type === 'info') {
-                locationStatus.classList.add('bg-yellow-100', 'text-yellow-800');
-            } else if (type === 'success') {
-                locationStatus.classList.add('bg-green-100', 'text-green-800');
-            } else if (type === 'error') {
-                locationStatus.classList.add('bg-red-100', 'text-red-800');
+            if (simProgress >= 1.0) {
+                simProgress = 0;
+                currentStepIdx++;
+                updateNavInstruction(); // 다음 단계 안내 업데이트
             } else {
-                 locationStatus.classList.add('bg-gray-100', 'text-gray-800');
-            }
-
-            if (duration > 0) {
-                statusTimeout = setTimeout(() => {
-                    locationStatus.classList.add('hidden');
-                }, duration);
-            }
-        }
-
-
-        // --- 5. 맵 그리기 및 이벤트 처리 ---
-
-        // 맵의 노드와 엣지를 캔버스에 그립니다.
-        function drawMap(path = []) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // 캔버스 지우기
-
-            const scaleX = canvas.width / 800;
-            const scaleY = canvas.height / 400;
-
-            // 1. 엣지(경로) 그리기
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = '#9ca3af'; // 기본 회색
-
-            // 모든 엣지 그리기
-            for (const source in graph) {
-                for (const target in graph[source]) {
-                    if (!nodes[source] || !nodes[target]) continue; // 동적 노드가 없을 경우 대비
-                    const sourcePos = nodes[source];
-                    const targetPos = nodes[target];
-
-                    const startX = sourcePos.x * scaleX;
-                    const startY = sourcePos.y * scaleY;
-                    const endX = targetPos.x * scaleX;
-                    const endY = targetPos.y * scaleY;
-                    
-                    // 엣지 선 그리기
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(endX, endY);
-                    ctx.stroke();
-
-                    // 거리(시간) 표시
-                    ctx.fillStyle = '#1f2937';
-                    ctx.font = '12px Inter';
-                    const midX = (startX + endX) / 2;
-                    const midY = (startY + endY) / 2;
-                    // 엣지 레이블을 엣지 옆에 표시
-                    ctx.fillText(`${graph[source][target]}분`, midX + 5, midY - 5);
-                }
-            }
-
-            // 2. 최단 경로 엣지 다시 그리기 (빨간색)
-            if (path.length > 1) {
-                ctx.strokeStyle = '#ef4444'; // 빨간색
-                ctx.lineWidth = 5;
-                for (let i = 0; i < path.length - 1; i++) {
-                    const source = path[i];
-                    const target = path[i+1];
-                    if (!nodes[source] || !nodes[target]) continue;
-                    
-                    const sourcePos = nodes[source];
-                    const targetPos = nodes[target];
-
-                    const startX = sourcePos.x * scaleX;
-                    const startY = sourcePos.y * scaleY;
-                    const endX = targetPos.x * scaleX;
-                    const endY = targetPos.y * scaleY;
-
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(endX, endY);
-                    ctx.stroke();
-                }
+                // 좌표 보간 (이동 애니메이션)
+                userPos.x = p1.x + (p2.x - p1.x) * simProgress;
+                userPos.y = p1.y + (p2.y - p1.y) * simProgress;
+                
+                // 실시간 남은 거리 업데이트 (시각적 효과)
+                const remainingDist = step.distance_m * (1 - simProgress);
+                updateRealtimeDistance(remainingDist);
+                
+                // 카메라 팔로우 (내 위치가 항상 화면 중앙에 오도록)
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+                // 부드러운 추적을 위해 lerp 사용 가능하나 여기선 직접 할당
+                view.x = cx - userPos.x * view.scale;
+                view.y = cy - userPos.y * view.scale;
             }
         }
 
-        // 노드 HTML 요소를 생성하고 위치를 지정합니다.
-        function drawHTMLNodes() {
-            const scaleX = canvas.width / 800;
-            const scaleY = canvas.height / 400;
+        function updateNavInstruction() {
+            if (currentStepIdx >= routeData.steps.length) return;
             
-            // 기존 노드 요소 제거
-            document.querySelectorAll('.node').forEach(n => n.remove());
-
-            for (const id in nodes) {
-                const nodeData = nodes[id];
-                // 'X' 노드는 위치가 설정되었거나(GPS 호출) 드롭다운에 추가되지 않는 정적 노드만 표시합니다.
-                if (nodeData.isDynamic && !isLocationFetched) continue; 
-
-                const nodeEl = document.createElement('div');
-                nodeEl.className = 'node';
-                if (nodeData.isDynamic) {
-                    nodeEl.classList.add('bg-blue-500', 'ring-4', 'ring-blue-300', 'ring-offset-2');
-                } else {
-                    nodeEl.classList.add('bg-green-500');
-                }
-                
-                nodeEl.id = `node-${id}`;
-                nodeEl.dataset.id = id;
-                nodeEl.innerHTML = `<div>${id}</div><div class="text-xs font-normal">${nodeData.name}</div>`;
-                
-                // 위치 설정
-                nodeEl.style.left = `${nodeData.x * scaleX - 25}px`; // x - half width
-                nodeEl.style.top = `${nodeData.y * scaleY - 25}px`;  // y - half height
-                
-                // 이벤트 리스너 추가
-                if (!nodeData.isDynamic) { // 'X' 노드는 클릭으로 선택하지 않음
-                    nodeEl.addEventListener('click', handleNodeClick);
-                }
-                
-                nodeMap.appendChild(nodeEl);
-                
-                // 선택 상태 업데이트
-                if (id === selectedStart) {
-                    nodeEl.style.backgroundColor = '#3b82f6';
-                } else if (id === selectedEnd) {
-                    nodeEl.style.backgroundColor = '#ef4444';
-                }
-            }
-        }
-
-        // 노드 클릭 핸들러
-        function handleNodeClick(event) {
-            const nodeId = event.currentTarget.dataset.id;
+            const step = routeData.steps[currentStepIdx];
+            const iconName = TURN_ICONS[step.turn_type] || 'arrow-up';
             
-            // 모든 선택 상태 초기화
-            document.querySelectorAll('.node').forEach(n => {
-                if (nodes[n.dataset.id].isDynamic) {
-                     n.style.backgroundColor = '#3b82f6';
-                } else {
-                     n.style.backgroundColor = '#10b981';
-                }
-            });
+            // 아이콘 업데이트
+            const iconContainer = document.getElementById('turn-icon').parentElement;
+            iconContainer.innerHTML = `<i data-lucide="${iconName}" class="w-8 h-8"></i>`;
+            lucide.createIcons();
 
-            if (nodeId === selectedStart) {
-                selectedStart = null;
-                startNodeSelect.value = '';
-            } else if (nodeId === selectedEnd) {
-                selectedEnd = null;
-                endNodeSelect.value = '';
-            } else if (!selectedStart) {
-                selectedStart = nodeId;
-                event.currentTarget.style.backgroundColor = '#3b82f6'; 
-                startNodeSelect.value = nodeId;
-            } else if (!selectedEnd) {
-                selectedEnd = nodeId;
-                event.currentTarget.style.backgroundColor = '#ef4444'; 
-                endNodeSelect.value = nodeId;
+            // 텍스트 업데이트 ("100m 뒤 우회전" 스타일)
+            const instructionEl = document.getElementById('nav-instruction');
+            const subTextEl = document.getElementById('nav-sub-text');
+            
+            // API에서 받은 상세 지침 활용 또는 재가공
+            instructionEl.innerText = step.detailed_instruction; 
+            // 예: "약 150m를 직진하여 다음 갈림길로 이동합니다."
+            
+            // 강조 표시
+            if (step.turn_type === '도착') {
+                iconContainer.className = "turn-icon-box bg-green-500";
+                instructionEl.className = "text-xl font-bold text-green-600 leading-tight mb-1";
             } else {
-                // 모두 선택된 상태에서 새로운 출발지 선택
-                selectedStart = nodeId;
-                selectedEnd = null;
-                event.currentTarget.style.backgroundColor = '#3b82f6';
-                startNodeSelect.value = nodeId;
-                endNodeSelect.value = '';
+                iconContainer.className = "turn-icon-box bg-blue-600";
+                instructionEl.className = "text-xl font-bold text-slate-900 leading-tight mb-1";
             }
-            drawMap(); 
         }
 
-        // 자동 선택 핸들러 (GPS로 'X' 노드 선택 시)
-        function handleAutoSelect(nodeId) {
-            // 기존 선택 해제
-            selectedStart = null;
-            selectedEnd = null;
-            document.querySelectorAll('.node').forEach(n => {
-                if (nodes[n.dataset.id].isDynamic) {
-                     n.style.backgroundColor = '#3b82f6'; // X 노드는 파란색 유지
-                } else {
-                     n.style.backgroundColor = '#10b981';
-                }
-            });
-
-            // 'X' 노드를 출발지로 설정
-            selectedStart = nodeId;
-            startNodeSelect.innerHTML = populateDropdownOptions(nodeId); // 'X' 포함하여 업데이트
-            startNodeSelect.value = nodeId;
-            document.getElementById(`node-${nodeId}`).style.backgroundColor = '#3b82f6';
-
-            endNodeSelect.value = '';
-            drawMap();
-        }
-
-        // --- 6. UI 초기화 및 이벤트 리스너 설정 ---
-
-        // 드롭다운 메뉴 옵션을 채웁니다.
-        function populateDropdownOptions(selectedId = '') {
-            let optionsHTML = '<option value="" disabled ' + (selectedId ? '' : 'selected') + '>선택하세요</option>';
-            for (const id in nodes) {
-                if (!nodes[id].isDynamic || id === 'X') { // 'X' 노드는 GPS 호출 시에만 표시
-                    optionsHTML += `<option value="${id}" ${id === selectedId ? 'selected' : ''}>${id}: ${nodes[id].name}</option>`;
-                }
+        function updateRealtimeDistance(dist) {
+            const el = document.getElementById('nav-sub-text');
+            if (dist < 10) {
+                el.innerText = "잠시 후 회전/도착";
+                el.className = "text-base text-red-500 font-bold animate-pulse";
+            } else {
+                el.innerText = `${Math.round(dist)}m 남음`;
+                el.className = "text-base text-blue-600 font-semibold";
             }
-            return optionsHTML;
         }
 
-        function populateDropdowns() {
-            startNodeSelect.innerHTML = populateDropdownOptions(selectedStart);
-            endNodeSelect.innerHTML = populateDropdownOptions(selectedEnd);
-        }
-
-        // 드롭다운 변경 시 노드 선택 상태 업데이트
-        function handleDropdownChange(event) {
+        function finishNavigation() {
+            clearInterval(simInterval);
+            document.getElementById('nav-instruction').innerText = "목적지 도착 완료!";
+            document.getElementById('nav-sub-text').innerText = "안내를 종료합니다.";
             
-            // 모든 노드 선택 해제 및 기본 색상 복원
-            document.querySelectorAll('.node').forEach(n => {
-                if (nodes[n.dataset.id].isDynamic) {
-                     n.style.backgroundColor = '#3b82f6';
-                } else {
-                     n.style.backgroundColor = '#10b981';
-                }
+            const iconContainer = document.getElementById('turn-icon').parentElement;
+            iconContainer.className = "turn-icon-box bg-green-500";
+            iconContainer.innerHTML = `<i data-lucide="check" class="w-8 h-8"></i>`;
+            lucide.createIcons();
+
+            setTimeout(() => {
+                alert("도착했습니다!");
+                stopNavigation();
+            }, 2000);
+        }
+
+        // --- 렌더링 ---
+        function render() {
+            // 배경
+            ctx.fillStyle = "#f1f5f9";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            // 카메라 뷰 적용
+            ctx.translate(view.x, view.y);
+            ctx.scale(view.scale, view.scale);
+
+            // 1. 연결선 (도로)
+            ctx.lineWidth = 20;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#e2e8f0'; // 도로 색상 (연한 회색)
+            EDGES.forEach(e => {
+                const p1 = NODES[e.u];
+                const p2 = NODES[e.v];
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
             });
             
-            selectedStart = startNodeSelect.value || null;
-            selectedEnd = endNodeSelect.value || null;
+            // 도로 중앙선
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#ffffff';
+            ctx.setLineDash([10, 10]);
+            EDGES.forEach(e => {
+                const p1 = NODES[e.u];
+                const p2 = NODES[e.v];
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            });
+            ctx.setLineDash([]);
 
-            // 새로운 선택 상태에 따라 UI 업데이트
-            if (selectedStart) {
-                const startEl = document.getElementById(`node-${selectedStart}`);
-                if (startEl) startEl.style.backgroundColor = '#3b82f6';
-            }
-            if (selectedEnd) {
-                const endEl = document.getElementById(`node-${selectedEnd}`);
-                if (endEl) endEl.style.backgroundColor = '#ef4444';
-            }
-
-            drawMap(); // 맵 다시 그리기
-        }
-        
-        startNodeSelect.addEventListener('change', handleDropdownChange);
-        endNodeSelect.addEventListener('change', handleDropdownChange);
-
-
-        // 경로 찾기 버튼 클릭 핸들러
-        findPathBtn.addEventListener('click', () => {
-            const start = startNodeSelect.value;
-            const end = endNodeSelect.value;
-
-            if (!start || !end) {
-                resultDisplay.innerHTML = '<p class="text-red-500 font-semibold">출발 지점과 도착 지점을 모두 선택해주세요.</p>';
-                return;
-            }
-
-            if (start === end) {
-                resultDisplay.innerHTML = '<p class="text-red-500 font-semibold">출발 지점과 도착 지점은 달라야 합니다.</p>';
-                return;
-            }
-
-            const result = dijkstra(start, end);
-
-            if (result.distance === Infinity) {
-                resultDisplay.innerHTML = `
-                    <p class="text-lg font-semibold text-red-600">경로를 찾을 수 없습니다.</p>
-                    <p class="text-gray-600">선택하신 두 지점 사이에는 연결된 경로가 없습니다.</p>
-                `;
-                drawMap([]); // 경로 없는 맵 그리기
-            } else {
-                const pathText = result.path.map(id => `${id} (${nodes[id].name})`).join(' → ');
+            // 2. 전체 경로 하이라이트 (내비 중일 때)
+            if (routeData) {
+                ctx.lineWidth = 8;
+                ctx.strokeStyle = '#3b82f6'; // 파란색 경로
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
                 
-                resultDisplay.innerHTML = `
-                    <h3 class="text-lg font-bold text-blue-600 mb-2">최단 경로 발견!</h3>
-                    <p class="text-gray-700"><strong>총 소요 시간:</strong> <span class="text-2xl font-extrabold text-red-500">${result.distance}분</span></p>
-                    <p class="mt-2"><strong>경로:</strong> ${pathText}</p>
-                `;
-                drawMap(result.path); // 최단 경로를 강조하여 맵 그리기
+                // 최적 경로상의 노드들을 연결
+                const pathNodes = routeData.optimal_path_areas;
+                if (pathNodes.length > 0) {
+                    const start = NODES[pathNodes[0]];
+                    ctx.moveTo(start.x, start.y);
+                    for(let i=1; i<pathNodes.length; i++) {
+                        const p = NODES[pathNodes[i]];
+                        ctx.lineTo(p.x, p.y);
+                    }
+                }
+                ctx.stroke();
             }
-        });
 
-        // 초기 실행
-        window.onload = function() {
-            populateDropdowns();
-            resizeCanvas(); // 캔버스 크기 조정 및 초기 맵 그리기
-            drawHTMLNodes(); // 노드 HTML 요소 생성
-        };
+            // 3. 노드 (장소)
+            Object.keys(NODES).forEach(k => {
+                const n = NODES[k];
+                const isStart = document.getElementById('start-select').value === k;
+                const isEnd = document.getElementById('end-select').value === k;
 
+                // 그림자
+                ctx.beginPath();
+                ctx.arc(n.x, n.y + 5, 12, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.fill();
+
+                // 노드 원
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, 12, 0, Math.PI*2);
+                if (isStart) ctx.fillStyle = '#22c55e';
+                else if (isEnd) ctx.fillStyle = '#ef4444';
+                else ctx.fillStyle = 'white';
+                ctx.fill();
+                
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 텍스트
+                ctx.font = 'bold 24px sans-serif';
+                ctx.fillStyle = '#1e293b';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(k, n.x, n.y - 20);
+            });
+
+            // 4. 사용자 마커 (내비게이션 중)
+            if (userPos.x !== 0 && (isNavigating || routeData)) {
+                // 펄스 효과
+                const time = Date.now() / 500;
+                const size = 20 + Math.sin(time) * 5;
+                ctx.beginPath();
+                ctx.arc(userPos.x, userPos.y, size, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+                ctx.fill();
+
+                // 화살표/점
+                ctx.beginPath();
+                ctx.arc(userPos.x, userPos.y, 10, 0, Math.PI*2);
+                ctx.fillStyle = '#2563eb';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'white';
+                ctx.stroke();
+            }
+
+            ctx.restore();
+            requestAnimationFrame(render);
+        }
     </script>
 </body>
 </html>
