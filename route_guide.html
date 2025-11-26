@@ -1,71 +1,40 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (150m 격자 맵, 방향 표시)</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (50m 근접 기준)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f4f7f9; }
-        .container { max-width: 800px; }
-        .card { background-color: white; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
-        .gps-status-ok { background-color: #d1fae5; color: #065f46; border: 1px solid #34d399; }
-        .gps-status-err { background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
-        
-        #route-map {
-            width: 100%;
-            height: auto;
-            border: 1px solid #e5e7eb;
-            background-color: #ffffff;
-            border-radius: 0.75rem;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
-            min-height: 250px; 
-        }
-
-        #navigation-bar {
-            position: fixed; 
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 10;
-            background-color: #1e3a8a;
-            color: white;
-            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.2);
-            border-top-left-radius: 1rem;
-            border-top-right-radius: 1rem;
-            transform: translateY(100%);
-            transition: transform 0.3s ease-in-out;
-            padding: 1rem;
-        }
-
-        #navigation-bar.active {
-            transform: translateY(0);
-        }
+        .container { max-width: 900px; }
+        .card { background-color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .gps-status-ok { background-color: #d1fae5; color: #065f46; border:1px solid #34d399; }
+        .gps-status-err { background-color: #fee2e2; color: #991b1b; border:1px solid #f87171; }
+        #route-map { width:100%; height:auto; border:1px solid #e5e7eb; background:#fff; border-radius:.75rem; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); min-height:300px; }
+        #navigation-bar { position: fixed; bottom:0; left:0; right:0; z-index: 50; background:#1e3a8a; color:white; box-shadow: 0 -4px 12px rgba(0,0,0,0.2); border-top-left-radius:1rem; border-top-right-radius:1rem; transform: translateY(100%); transition: transform .3s ease-in-out; padding:1rem;}
+        #navigation-bar.active { transform: translateY(0); }
     </style>
 </head>
 <body class="p-4 sm:p-8">
-    <div class="container mx-auto pb-32">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">
-            ✈️ 공항 터미널 GPS 내비게이션 (150m 맵, 방향 표시)
-        </h1>
+    <div class="container mx-auto pb-40">
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션</h1>
 
         <div class="card p-6 rounded-xl mb-6">
             <div id="gps-status-message" class="p-3 mb-4 rounded-lg text-sm font-medium gps-status-err">
                 GPS 상태: 내비게이션을 시작해야 위치 추적을 시작합니다.
             </div>
-            
+
             <h2 class="text-xl font-bold text-gray-700 mb-4">경로 설정</h2>
             <div class="flex flex-col sm:flex-row gap-4">
                 <div class="flex-1">
-                    <label for="start-area" class="block text-sm font-medium text-gray-700 mb-1">출발 구역 (QR 스캔/현재 위치)</label>
-                    <select id="start-area" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50">
-                        </select>
+                    <label for="start-area" class="block text-sm font-medium text-gray-700 mb-1">출발 구역</label>
+                    <select id="start-area" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50"></select>
                 </div>
                 <div class="flex-1">
                     <label for="end-area" class="block text-sm font-medium text-gray-700 mb-1">도착 구역</label>
-                    <select id="end-area" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                        </select>
+                    <select id="end-area" class="w-full p-2 border border-gray-300 rounded-lg"></select>
                 </div>
                 <button id="search-button" onclick="startRouteGuidance()" class="sm:self-end mt-2 sm:mt-0 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-md">
                     경로 검색 및 내비게이션 준비
@@ -75,921 +44,577 @@
 
         <div class="card p-6 rounded-xl">
             <h2 class="text-xl font-bold text-gray-700 mb-4">경로 지도 시각화</h2>
-            
-            <canvas id="route-map" width="700" height="400" class="mb-6"></canvas>
+            <canvas id="route-map" width="900" height="520" class="mb-6"></canvas>
 
             <div id="route-guidance-output">
-                <p class="text-gray-500">지도를 시각화하기 위해 출발지 및 도착지를 설정하고 버튼을 눌러주세요.</p>
+                <p class="text-gray-500">지도를 시각화하려면 출발지/도착지를 설정하고 버튼을 눌러주세요.</p>
             </div>
-            
+
             <div id="steps-list" class="mt-8 hidden">
                 <h3 class="text-lg font-bold text-gray-700 mb-3">전체 경로 지침 미리보기:</h3>
-                </div>
+            </div>
         </div>
     </div>
 
     <div id="navigation-bar" class="p-4 flex items-center justify-between">
         <div class="flex items-center space-x-3">
-            <div id="current-turn-icon" class="text-4xl flex-shrink-0">
-                </div>
+            <div id="current-turn-icon" class="text-4xl flex-shrink-0"></div>
             <div class="flex flex-col min-w-0">
-                <p id="nav-next-instruction" class="text-xl font-extrabold leading-snug truncate">
-                    경로를 검색해 주세요.
-                </p>
-                <p id="nav-step-info" class="text-sm text-blue-200 mt-0.5">
-                    총 거리: 0m | 총 시간: 0분
-                </p>
+                <p id="nav-next-instruction" class="text-xl font-extrabold leading-snug truncate">경로를 검색해 주세요.</p>
+                <p id="nav-step-info" class="text-sm text-blue-200 mt-0.5">총 거리: 0m | 총 시간: 0분</p>
             </div>
         </div>
-        <button id="nav-control-button" onclick="toggleNavigation()" class="px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600 transition duration-150 flex-shrink-0" disabled>
-            GPS 내비 시작
-        </button>
+        <button id="nav-control-button" onclick="toggleNavigation()" class="px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600 transition duration-150 flex-shrink-0" disabled>GPS 내비 시작</button>
     </div>
 
     <script>
-        // --- 지도 및 경로 데이터 정의 (실제 GPS 형식의 가상 좌표 사용) ---
-        // ✈️ 공항 터미널 환경에 맞춘 구역 이름
-        const AREA_NAMES = {
-            'A': 'A. 국제선 도착 게이트 (1층)', 
-            'B': 'B. 면세품 수령 데스크 (1층)', 
-            'C': 'C. 환전소/여행자 보험 (1층)',
-            'D': 'D. 국내선 체크인 카운터 (2층)', 
-            'E': 'E. 출국 심사대 입구 (2층)', 
-            'F': 'F. 푸드코트 (2층)',
-            'G': 'G. 라운지 입구 (3층 프리미엄)', 
-            'H': 'H. 면세점 중앙 구역 (3층)', 
-            'I': 'I. 탑승 게이트 (3층 장거리)'
-        };
-        const AREA_IDS = Object.keys(AREA_NAMES);
-        
-        // **축소된 가상 좌표 (3x3 격자)**: 구역 간 거리를 약 150m가 되도록 규칙적으로 배치
-        const AREA_COORDINATES = {
-            'A': { lat: 37.510000, lon: 127.050000 }, 
-            'B': { lat: 37.510000, lon: 127.051800 }, 
-            'C': { lat: 37.510000, lon: 127.053600 }, 
-            'D': { lat: 37.508500, lon: 127.050000 }, 
-            'E': { lat: 37.508500, lon: 127.051800 }, 
-            'F': { lat: 37.508500, lon: 127.053600 }, 
-            'G': { lat: 37.507000, lon: 127.050000 }, 
-            'H': { lat: 37.507000, lon: 127.051800 }, 
-            'I': { lat: 37.507000, lon: 127.053600 } 
-        };
-        
-        // **원본 좌표 저장**: 맵 리셋 및 오프셋 계산을 위해 필요합니다.
-        let ORIGINAL_AREA_COORDINATES = JSON.parse(JSON.stringify(AREA_COORDINATES));
+    // -------------------------
+    // 데이터 및 초기 설정
+    // -------------------------
+    const AREA_NAMES = {
+        'A': 'A. 국제선 도착 게이트 (1층)',
+        'B': 'B. 면세품 수령 데스크 (1층)',
+        'C': 'C. 환전소/여행자 보험 (1층)',
+        'D': 'D. 국내선 체크인 카운터 (2층)',
+        'E': 'E. 출국 심사대 입구 (2층)',
+        'F': 'F. 푸드코트 (2층)',
+        'G': 'G. 라운지 입구 (3층 프리미엄)',
+        'H': 'H. 면세점 중앙 구역 (3층)',
+        'I': 'I. 탑승 게이트 (3층 장거리)'
+    };
+    const AREA_IDS = Object.keys(AREA_NAMES);
 
-        // 경로 연결 정보 (Dijkstra 계산용) - 3x3 격자 형태의 연결을 구현
-        // 거리: 약 150~170m (수평/수직), 약 210m (대각선)
-        const ALL_CONNECTIONS = [
-            // u, v, distance(m), time(min), turn, instruction (경로 가이드)
-            // 수평 연결 (L/R) - 160m, 2분
-            { u: 'A', v: 'B', distance: 160, time: 2, turn: "직진", instruction: "오른쪽 면세품 수령 데스크 방향으로 직진" },
-            { u: 'B', v: 'C', distance: 160, time: 2, turn: "직진", instruction: "오른쪽 환전소/여행자 보험 방향으로 직진" },
-            { u: 'D', v: 'E', distance: 160, time: 2, turn: "직진", instruction: "오른쪽 출국 심사대 입구 방향으로 직진" },
-            { u: 'E', v: 'F', distance: 160, time: 2, turn: "직진", instruction: "오른쪽 푸드코트 방향으로 직진" },
-            { u: 'G', v: 'H', distance: 160, time: 2, turn: "직진", instruction: "오른쪽 면세점 중앙 구역 방향으로 직진" },
-            { u: 'H', v: 'I', distance: 160, time: 2, turn: "직진", instruction: "오른쪽 탑승 게이트 방향으로 직진" },
-            
-            // 수직 연결 (U/D) - 170m, 2분 (층간 이동 포함)
-            { u: 'A', v: 'D', distance: 170, time: 2, turn: "직진", instruction: "에스컬레이터를 타고 위층 국내선 체크인 카운터 방향으로 이동" },
-            { u: 'B', v: 'E', distance: 170, time: 2, turn: "직진", instruction: "에스컬레이터를 타고 위층 출국 심사대 입구 방향으로 이동" },
-            { u: 'C', v: 'F', distance: 170, time: 2, turn: "직진", instruction: "에스컬레이터를 타고 위층 푸드코트 방향으로 이동" },
-            { u: 'D', v: 'G', distance: 170, time: 2, turn: "직진", instruction: "에스컬레이터를 타고 위층 라운지 입구 방향으로 이동" },
-            { u: 'E', v: 'H', distance: 170, time: 2, turn: "직진", instruction: "에스컬레이터를 타고 위층 면세점 중앙 구역 방향으로 이동" },
-            { u: 'F', v: 'I', distance: 170, time: 2, turn: "직진", instruction: "에스컬레이터를 타고 위층 탑승 게이트 방향으로 이동" },
-            
-            // 대각선 연결 (예시: A-E, 210m, 3분)
-            { u: 'A', v: 'E', distance: 210, time: 3, turn: "우회전", instruction: "대각선으로 이동 후 출국 심사대 입구 방향으로 이동" },
-            { u: 'B', v: 'D', distance: 210, time: 3, turn: "좌회전", instruction: "대각선으로 이동 후 국내선 체크인 카운터 방향으로 이동" },
-            { u: 'B', v: 'F', distance: 210, time: 3, turn: "우회전", instruction: "대각선으로 이동 후 푸드코트 방향으로 이동" },
-            { u: 'E', v: 'C', distance: 210, time: 3, turn: "좌회전", instruction: "대각선으로 이동 후 환전소 방향으로 이동" },
-        ];
-        
-        // ALL_CONNECTIONS의 역방향 연결을 자동으로 추가하는 로직
-        const reverseConnections = [];
-        ALL_CONNECTIONS.forEach(conn => {
-            const reverseTurn = (conn.turn === "우회전") ? "좌회전" : (conn.turn === "좌회전") ? "우회전" : "직진";
-            
-            // 층간 이동에 대한 역방향 설명 조정
-            let reverseInstruction = conn.instruction
-                .replace('오른쪽', '왼쪽')
-                .replace('위층', '아래층');
+    // 3x3 가상 격자 좌표 (원본)
+    const AREA_COORDINATES = {
+        'A': { lat: 37.510000, lon: 127.050000 },
+        'B': { lat: 37.510000, lon: 127.051800 },
+        'C': { lat: 37.510000, lon: 127.053600 },
+        'D': { lat: 37.508500, lon: 127.050000 },
+        'E': { lat: 37.508500, lon: 127.051800 },
+        'F': { lat: 37.508500, lon: 127.053600 },
+        'G': { lat: 37.507000, lon: 127.050000 },
+        'H': { lat: 37.507000, lon: 127.051800 },
+        'I': { lat: 37.507000, lon: 127.053600 }
+    };
+    let ORIGINAL_AREA_COORDINATES = JSON.parse(JSON.stringify(AREA_COORDINATES));
 
-            // 층간 이동이 명확한 경우
-            if (conn.instruction.includes('에스컬레이터를 타고 위층')) {
-                reverseInstruction = reverseInstruction.replace('위층', '아래층');
-            } else if (conn.instruction.includes('에스컬레이터를 타고 아래층')) {
-                reverseInstruction = reverseInstruction.replace('아래층', '위층');
-            }
-            
-            // 역방향이 이미 있는지 확인 (중복 방지)
-            const exists = ALL_CONNECTIONS.some(
-                rConn => rConn.u === conn.v && rConn.v === conn.u
-            );
+    const ALL_CONNECTIONS = [
+        { u:'A', v:'B', distance:160, time:2, turn:"직진", instruction:"오른쪽 면세품 수령 데스크 방향으로 직진" },
+        { u:'B', v:'C', distance:160, time:2, turn:"직진", instruction:"오른쪽 환전소/여행자 보험 방향으로 직진" },
+        { u:'D', v:'E', distance:160, time:2, turn:"직진", instruction:"오른쪽 출국 심사대 입구 방향으로 직진" },
+        { u:'E', v:'F', distance:160, time:2, turn:"직진", instruction:"오른쪽 푸드코트 방향으로 직진" },
+        { u:'G', v:'H', distance:160, time:2, turn:"직진", instruction:"오른쪽 면세점 중앙 구역 방향으로 직진" },
+        { u:'H', v:'I', distance:160, time:2, turn:"직진", instruction:"오른쪽 탑승 게이트 방향으로 직진" },
 
-            if (!exists) {
-                reverseConnections.push({
-                    u: conn.v, 
-                    v: conn.u, 
-                    distance: conn.distance, 
-                    time: conn.time, 
-                    turn: reverseTurn,
-                    instruction: reverseInstruction.replace(/방향으로 이동/g, '방향으로 돌아가기')
-                });
-            }
+        { u:'A', v:'D', distance:170, time:2, turn:"직진", instruction:"에스컬레이터를 타고 위층 국내선 체크인 카운터 방향으로 이동" },
+        { u:'B', v:'E', distance:170, time:2, turn:"직진", instruction:"에스컬레이터를 타고 위층 출국 심사대 입구 방향으로 이동" },
+        { u:'C', v:'F', distance:170, time:2, turn:"직진", instruction:"에스컬레이터를 타고 위층 푸드코트 방향으로 이동" },
+        { u:'D', v:'G', distance:170, time:2, turn:"직진", instruction:"에스컬레이터를 타고 위층 라운지 입구 방향으로 이동" },
+        { u:'E', v:'H', distance:170, time:2, turn:"직진", instruction:"에스컬레이터를 타고 위층 면세점 중앙 구역 방향으로 이동" },
+        { u:'F', v:'I', distance:170, time:2, turn:"직진", instruction:"에스컬레이터를 타고 위층 탑승 게이트 방향으로 이동" },
+
+        { u:'A', v:'E', distance:210, time:3, turn:"우회전", instruction:"대각선으로 이동 후 출국 심사대 입구 방향으로 이동" },
+        { u:'B', v:'D', distance:210, time:3, turn:"좌회전", instruction:"대각선으로 이동 후 국내선 체크인 카운터 방향으로 이동" },
+        { u:'B', v:'F', distance:210, time:3, turn:"우회전", instruction:"대각선으로 이동 후 푸드코트 방향으로 이동" },
+        { u:'E', v:'C', distance:210, time:3, turn:"좌회전", instruction:"대각선으로 이동 후 환전소 방향으로 이동" }
+    ];
+
+    // 자동으로 역방향 추가 (중복 방지)
+    const reverseConnections = [];
+    ALL_CONNECTIONS.forEach(conn => {
+        const reverseTurn = (conn.turn === "우회전") ? "좌회전" : (conn.turn === "좌회전") ? "우회전" : "직진";
+        let reverseInstruction = conn.instruction.replace('오른쪽', '왼쪽').replace('위층', '아래층');
+        if (!ALL_CONNECTIONS.some(r => r.u === conn.v && r.v === conn.u)) {
+            reverseConnections.push({ u: conn.v, v: conn.u, distance: conn.distance, time: conn.time, turn: reverseTurn, instruction: reverseInstruction.replace(/방향으로 이동/g, '방향으로 돌아가기') });
+        }
+    });
+    ALL_CONNECTIONS.push(...reverseConnections);
+
+    const TURN_ICONS = { '직진':'arrow-up', '우회전':'corner-down-right', '좌회전':'corner-down-left', '도착':'map-pin' };
+
+    // 전역 상태
+    let lastRouteData = null;
+    let currentStepIndex = 0;
+    let isNavigating = false;
+    let gpsWatchId = null;
+    let userGpsPosition = null;
+    let userGpsHeading = 0;
+    const DISTANCE_THRESHOLD = 50; // <-- 모두 50m 기준 (요청 반영)
+    const AVERAGE_SPEED_MPS = 4000/3600; // 4 km/h
+
+    // DOM
+    const startSelect = document.getElementById('start-area');
+    const endSelect = document.getElementById('end-area');
+    const outputDiv = document.getElementById('route-guidance-output');
+    const searchButton = document.getElementById('search-button');
+    const navBar = document.getElementById('navigation-bar');
+    const navControlButton = document.getElementById('nav-control-button');
+    const gpsStatusMessage = document.getElementById('gps-status-message');
+    const stepsListDiv = document.getElementById('steps-list');
+    const canvas = document.getElementById('route-map');
+    const ctx = canvas.getContext('2d');
+    const navInstruction = document.getElementById('nav-next-instruction');
+
+    // 맵 경계
+    const mapBounds = { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity };
+    function recalculateMapBounds() {
+        mapBounds.minLat = Infinity; mapBounds.maxLat = -Infinity; mapBounds.minLon = Infinity; mapBounds.maxLon = -Infinity;
+        AREA_IDS.forEach(id => {
+            const c = AREA_COORDINATES[id];
+            mapBounds.minLat = Math.min(mapBounds.minLat, c.lat);
+            mapBounds.maxLat = Math.max(mapBounds.maxLat, c.lat);
+            mapBounds.minLon = Math.min(mapBounds.minLon, c.lon);
+            mapBounds.maxLon = Math.max(mapBounds.maxLon, c.lon);
         });
-        ALL_CONNECTIONS.push(...reverseConnections);
+    }
+    recalculateMapBounds();
 
+    // 유틸리티: 거리 계산, 좌표->캔버스
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI/180;
+        const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1) * Math.PI/180;
+        const Δλ = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(Δφ/2)*Math.sin(Δφ/2) + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)*Math.sin(Δλ/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
 
-        const TURN_ICONS = {
-            '직진': 'arrow-up', '우회전': 'corner-down-right', '좌회전': 'corner-down-left', '도착': 'map-pin'
-        };
-        
-        // --- 전역 상태 변수 ---
-        let lastRouteData = null; 
-        let currentStepIndex = 0; 
-        let isNavigating = false; 
-        let gpsWatchId = null; 
-        let userGpsPosition = null; 
-        let userGpsHeading = 0; // **사용자가 바라보는 방향 (0~360도)**
-        const DISTANCE_THRESHOLD = 50; // 미터 단위, 다음 노드로 전환할 최소 근접 거리 (5m) 
-        
-        // **현실적인 예상 시간을 위한 평균 속도 정의 (4km/h)**
-        const AVERAGE_SPEED_MPS = 4000 / 3600; // 4 km/h ≈ 1.11 m/s 
+    function latLonToCanvas(lat, lon) {
+        const latRange = (mapBounds.maxLat - mapBounds.minLat) || 0.0000001;
+        const lonRange = (mapBounds.maxLon - mapBounds.minLon) || 0.0000001;
+        const padding = 0.08;
+        const drawWidth = canvas.width * (1 - 2*padding);
+        const drawHeight = canvas.height * (1 - 2*padding);
+        const offsetX = canvas.width * padding;
+        const offsetY = canvas.height * padding;
+        const x = ((lon - mapBounds.minLon) / lonRange) * drawWidth + offsetX;
+        const y = drawHeight - (((lat - mapBounds.minLat) / latRange) * drawHeight) + offsetY;
+        return { x, y };
+    }
 
-        // DOM 요소 캐싱
-        const startSelect = document.getElementById('start-area');
-        const endSelect = document.getElementById('end-area');
-        const outputDiv = document.getElementById('route-guidance-output');
-        const searchButton = document.getElementById('search-button');
-        const navBar = document.getElementById('navigation-bar');
-        const navControlButton = document.getElementById('nav-control-button');
-        const gpsStatusMessage = document.getElementById('gps-status-message');
-        const stepsListDiv = document.getElementById('steps-list');
-        const canvas = document.getElementById('route-map');
-        const ctx = canvas.getContext('2d');
-        const navInstruction = document.getElementById('nav-next-instruction');
+    // GPS 추적
+    function startGpsTracking() {
+        if (!navigator.geolocation) { updateGpsStatus("error","오류: 브라우저가 GPS를 지원하지 않습니다."); return; }
+        if (gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, { enableHighAccuracy:true, timeout:5000, maximumAge:0 });
+        updateGpsStatus("ok","GPS 추적 시작. 위치 권한을 승인하세요.");
+    }
+    function stopGpsTracking() {
+        if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+        updateGpsStatus("error","GPS 추적 중지됨.");
+    }
 
-        // Lat/Lon -> Canvas 좌표 변환을 위한 맵 경계 계산
-        const mapBounds = {
-            minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity
-        };
-        
-        // 초기 맵 경계 계산
-        function recalculateMapBounds() {
-            mapBounds.minLat = Infinity; mapBounds.maxLat = -Infinity; 
-            mapBounds.minLon = Infinity; mapBounds.maxLon = -Infinity;
-            
-            AREA_IDS.forEach(id => {
-                const coord = AREA_COORDINATES[id];
-                mapBounds.minLat = Math.min(mapBounds.minLat, coord.lat);
-                mapBounds.maxLat = Math.max(mapBounds.maxLat, coord.lat);
-                mapBounds.minLon = Math.min(mapBounds.minLon, coord.lon);
-                mapBounds.maxLon = Math.max(mapBounds.maxLon, coord.lon);
-            });
+    function handleGpsSuccess(position) {
+        const { latitude, longitude, accuracy, heading } = position.coords;
+        userGpsPosition = { lat: latitude, lon: longitude };
+        if (heading !== null && !isNaN(heading)) userGpsHeading = heading;
+        updateGpsStatus("ok", `현재 GPS 위치 수신됨. 정확도: ${Math.round(accuracy)}m`);
+        if (isNavigating && lastRouteData && lastRouteData.steps && currentStepIndex < lastRouteData.steps.length) updateGpsPosition(userGpsPosition);
+        drawMap();
+    }
+    function handleGpsError(error) {
+        let message = "알 수 없는 GPS 오류.";
+        switch (error.code) {
+            case error.PERMISSION_DENIED: message = "오류: 위치 정보 접근이 거부되었습니다."; break;
+            case error.POSITION_UNAVAILABLE: message = "오류: 위치 정보를 사용할 수 없습니다."; break;
+            case error.TIMEOUT: message = "오류: 위치 정보 요청 시간이 초과되었습니다."; break;
         }
+        updateGpsStatus("error", message);
+        stopGpsTracking();
+    }
+
+    function updateGpsPosition(currentGps) {
+        if (!lastRouteData || !lastRouteData.steps || currentStepIndex >= lastRouteData.steps.length) return;
+        const currentStep = lastRouteData.steps[currentStepIndex];
+        const targetAreaId = currentStep.to_area;
+        const targetGps = AREA_COORDINATES[targetAreaId];
+        if (!targetGps) return;
+
+        // 1. 남은 거리 계산
+        const distanceToTarget = calculateDistance(currentGps.lat, currentGps.lon, targetGps.lat, targetGps.lon);
+
+        // 2. UI 업데이트
+        updateNavigationBar(currentStep, distanceToTarget);
+        highlightStep(currentStepIndex);
+
+        // 3. 근접성 (50m 기준)
+        if (distanceToTarget < DISTANCE_THRESHOLD) {
+            currentStepIndex++;
+            if (currentStepIndex >= lastRouteData.steps.length) { handleArrival(); return; }
+            const nextStep = lastRouteData.steps[currentStepIndex];
+            updateNavigationBar(nextStep, calculateDistance(currentGps.lat, currentGps.lon, AREA_COORDINATES[nextStep.to_area].lat, AREA_COORDINATES[nextStep.to_area].lon));
+        }
+    }
+
+    // 맵 드로잉: 노선, 사용자, 방향 표시(개선)
+    function resizeCanvas() {
+        const containerWidth = canvas.parentElement.clientWidth;
+        canvas.width = Math.min(containerWidth, 900);
+        canvas.height = canvas.width * (520/900);
+        if (canvas.height < 300) canvas.height = 300;
+    }
+
+    function drawMap() {
+        resizeCanvas();
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        const data = lastRouteData || {};
+        const optimalPath = data.optimal_path_areas || [];
+
+        // 배경 연결선
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.lineWidth = 2;
+        ALL_CONNECTIONS.forEach(conn => {
+            const s = latLonToCanvas(AREA_COORDINATES[conn.u].lat, AREA_COORDINATES[conn.u].lon);
+            const e = latLonToCanvas(AREA_COORDINATES[conn.v].lat, AREA_COORDINATES[conn.v].lon);
+            ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        });
+
+        // 최적 경로
+        if (optimalPath.length > 1) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            let first = true;
+            for (const id of optimalPath) {
+                const c = latLonToCanvas(AREA_COORDINATES[id].lat, AREA_COORDINATES[id].lon);
+                if (first) { ctx.moveTo(c.x,c.y); first = false; } else ctx.lineTo(c.x,c.y);
+            }
+            ctx.stroke();
+        }
+
+        // 사용자 위치 및 방향 (개선된 표시)
+        if (isNavigating && userGpsPosition) {
+            const user = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
+
+            // 1) 시야 콘 (부채꼴)
+            ctx.save();
+            ctx.translate(user.x, user.y);
+            const rotation = (userGpsHeading || 0) * (Math.PI/180);
+            ctx.rotate(rotation);
+            ctx.beginPath();
+            const coneRadius = 80; // 시야 길이 (픽셀)
+            const coneAngle = 0.6; // +-0.3 rad ~ 약 34도
+            ctx.moveTo(0,0);
+            ctx.arc(0,0, coneRadius, -coneAngle/2, coneAngle/2);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(59,130,246,0.18)';
+            ctx.fill();
+            ctx.restore();
+
+            // 2) 앞쪽 가이드 라인 (짙은 파란색)
+            ctx.save();
+            ctx.translate(user.x,user.y);
+            ctx.rotate(rotation);
+            ctx.beginPath();
+            ctx.moveTo(0,0);
+            ctx.lineTo(0, -60); // 앞으로 60px
+            ctx.strokeStyle = '#1e40af';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            ctx.restore();
+
+            // 3) 큰 파란 화살표 (삼각형)
+            ctx.save();
+            ctx.translate(user.x, user.y);
+            ctx.rotate(rotation);
+            const arrowSize = 24; // 크게
+            ctx.fillStyle = '#2563eb';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, -arrowSize);
+            ctx.lineTo(-arrowSize*0.8, arrowSize*0.6);
+            ctx.lineTo(arrowSize*0.8, arrowSize*0.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // 목표까지 점선
+            if (lastRouteData && lastRouteData.steps && currentStepIndex < lastRouteData.steps.length) {
+                const targetId = lastRouteData.steps[currentStepIndex].to_area;
+                const t = latLonToCanvas(AREA_COORDINATES[targetId].lat, AREA_COORDINATES[targetId].lon);
+                ctx.strokeStyle = 'rgba(16,185,129,0.5)';
+                ctx.setLineDash([6,6]);
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(user.x, user.y);
+                ctx.lineTo(t.x, t.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        // 노드와 라벨
+        AREA_IDS.forEach(id => {
+            const coord = latLonToCanvas(AREA_COORDINATES[id].lat, AREA_COORDINATES[id].lon);
+            const isStart = lastRouteData && id === lastRouteData.start_area_id;
+            const isEnd = lastRouteData && id === lastRouteData.end_area_id;
+            ctx.beginPath();
+            ctx.fillStyle = isStart ? '#3b82f6' : (isEnd ? '#ef4444' : '#9ca3af');
+            ctx.arc(coord.x, coord.y, isStart||isEnd ? 9 : 6, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#1f2937';
+            ctx.font = '12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText(id, coord.x, coord.y - 16);
+        });
+    }
+
+    // Dijkstra (경로탐색)
+    function findOptimalRoute(startNode, endNode) {
+        const distances = {}; const previousNodes = {}; const pq = new Set();
+        AREA_IDS.forEach(id => { distances[id] = Infinity; previousNodes[id] = null; });
+        distances[startNode] = 0; pq.add(startNode);
+
+        const getMin = () => { let min=Infinity, node=null; pq.forEach(n=>{ if(distances[n]<min){min=distances[n]; node=n;} }); return node; };
+
+        while (pq.size>0) {
+            const node = getMin();
+            if (!node) break;
+            pq.delete(node);
+            if (node === endNode) break;
+            const neighbors = ALL_CONNECTIONS.filter(c=>c.u===node);
+            for (const nb of neighbors) {
+                const next = nb.v; const newT = distances[node] + nb.time;
+                if (newT < distances[next]) { distances[next] = newT; previousNodes[next] = node; pq.add(next); }
+            }
+        }
+
+        let path = []; let cur = endNode;
+        while (cur) {
+            path.unshift(cur);
+            cur = previousNodes[cur];
+            if (cur === startNode) { path.unshift(startNode); break; }
+            if (!cur) break;
+        }
+
+        if (path.length===0 || path[0]!==startNode || path[path.length-1]!==endNode) return { total_time_min: Infinity, optimal_path_areas: [] };
+        return { total_time_min: distances[endNode], optimal_path_areas: path };
+    }
+
+    function createRouteGuidance(optimalPath, totalTime) {
+        if (!optimalPath || optimalPath.length < 2) return { steps: [], total_distance_m: 0, total_time_min: 0 };
+        const steps = []; let totalDistance = 0;
+        for (let i=0;i<optimalPath.length-1;i++) {
+            const from = optimalPath[i], to = optimalPath[i+1];
+            const conn = ALL_CONNECTIONS.find(c=>c.u===from && c.v===to);
+            if (!conn) continue;
+            totalDistance += conn.distance;
+            const isLast = (i===optimalPath.length-2);
+            const turnType = isLast ? "도착" : conn.turn;
+            const instruction = isLast ? `최종 목적지인 ${AREA_NAMES[to]}에 도착했습니다. 경로 안내를 종료합니다.` : `${conn.instruction} 후 ${AREA_NAMES[to]} 방향으로 이동합니다.`;
+            steps.push({ step_id: i+1, from_area: from, to_area: to, distance_m: conn.distance, travel_time_min: conn.time, turn_type: turnType, detailed_instruction: instruction });
+        }
+        return { steps, total_distance_m: totalDistance, total_time_min: totalTime };
+    }
+
+    // 맵 오프셋 (사용자 위치 기준으로 가상 맵 이동)
+    function applyGpsOffsetToMap(currentLat, currentLon) {
+        const startAreaId = lastRouteData ? lastRouteData.start_area_id : null;
+        if (!startAreaId) return;
+        const baseLat = ORIGINAL_AREA_COORDINATES[startAreaId].lat;
+        const baseLon = ORIGINAL_AREA_COORDINATES[startAreaId].lon;
+        const deltaLat = currentLat - baseLat;
+        const deltaLon = currentLon - baseLon;
+        AREA_IDS.forEach(id => {
+            AREA_COORDINATES[id].lat = ORIGINAL_AREA_COORDINATES[id].lat + deltaLat;
+            AREA_COORDINATES[id].lon = ORIGINAL_AREA_COORDINATES[id].lon + deltaLon;
+        });
         recalculateMapBounds();
+        drawMap();
+    }
 
-        // --- 유틸리티 함수 ---
+    // 경로 검색 및 내비게이션 시작
+    function startRouteGuidance() {
+        if (isNavigating) stopNavigation();
+        const startId = startSelect.value; const endId = endSelect.value;
+        if (startId === endId) { outputDiv.innerHTML = `<div class="p-4 bg-yellow-100 rounded-lg text-yellow-700">출발지와 도착지가 동일합니다.</div>`; navBar.classList.remove('active'); return; }
+        searchButton.disabled = true; searchButton.innerText = '경로 계산 중...';
+        const { total_time_min, optimal_path_areas } = findOptimalRoute(startId, endId);
+        if (total_time_min === Infinity) { outputDiv.innerHTML = `<div class="p-4 bg-red-100 rounded-lg text-red-700">경로를 찾을 수 없습니다!</div>`; searchButton.disabled=false; searchButton.innerText='경로 검색 및 내비게이션 준비'; navBar.classList.remove('active'); return;}
+        const { steps, total_distance_m } = createRouteGuidance(optimal_path_areas, total_time_min);
+        lastRouteData = { start_area_id: startId, end_area_id: endId, optimal_path_areas: optimal_path_areas, total_time_min: Math.ceil(total_time_min), total_distance_m: total_distance_m, steps: steps };
+        currentStepIndex = 0;
+        renderGuidanceSummary(lastRouteData);
+        renderStepsList(lastRouteData.steps);
+        drawMap();
+        navBar.classList.add('active');
+        navControlButton.innerText = 'GPS 내비 중지'; navControlButton.disabled = false; navControlButton.classList.remove('bg-green-500','bg-blue-600','bg-yellow-500'); navControlButton.classList.add('bg-yellow-500');
+        searchButton.disabled=false; searchButton.innerText='경로 검색 및 내비게이션 준비';
+        // 자동 시작
+        startNavigation(true);
+    }
 
-        /**
-         * Haversine 공식을 사용하여 두 위경도 사이의 거리를 미터(m) 단위로 계산합니다.
-         */
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // 지구 반경 (미터)
-            const φ1 = lat1 * Math.PI/180;
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
+    function toggleNavigation() {
+        if (!lastRouteData) return;
+        if (navControlButton.innerText === '경로 재설정') { resetApp(); return; }
+        if (isNavigating) stopNavigation(); else startNavigation(false);
+    }
 
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    function startNavigation(isAutoStart=false) {
+        if (!navigator.geolocation) { updateGpsStatus("error","오류: 브라우저가 GPS를 지원하지 않습니다."); return; }
+        if (isNavigating) return;
+        isNavigating = true;
+        if (!isAutoStart) { navControlButton.innerText = 'GPS 내비 중지'; navControlButton.classList.remove('bg-green-500'); navControlButton.classList.add('bg-yellow-500'); }
+        // 초기 위치 한 번 얻어서 맵 오프셋 적용
+        navigator.geolocation.getCurrentPosition((pos) => {
+            applyGpsOffsetToMap(pos.coords.latitude, pos.coords.longitude);
+            startGpsTracking();
+        }, (err) => {
+            updateGpsStatus("error","GPS 초기 위치 획득 실패. 기존 좌표로 내비 시작.");
+            startGpsTracking();
+        }, { enableHighAccuracy:true, timeout:5000, maximumAge:0 });
 
-            return R * c; // 미터 단위 거리
+        if (lastRouteData && currentStepIndex < lastRouteData.steps.length) {
+            updateNavigationBar(lastRouteData.steps[currentStepIndex], 0); highlightStep(currentStepIndex);
         }
+    }
 
-        /**
-         * 위경도 좌표를 Canvas의 픽셀 좌표로 변환합니다.
-         */
-        function latLonToCanvas(lat, lon) {
-            const latRange = (mapBounds.maxLat - mapBounds.minLat) || 0.0000001; 
-            const lonRange = (mapBounds.maxLon - mapBounds.minLon) || 0.0000001; 
-            
-            const padding = 0.1; 
-            const drawWidth = canvas.width * (1 - 2 * padding);
-            const drawHeight = canvas.height * (1 - 2 * padding);
-            const offsetX = canvas.width * padding;
-            const offsetY = canvas.height * padding;
+    function stopNavigation() {
+        isNavigating = false;
+        navControlButton.innerText = 'GPS 내비 재개';
+        navControlButton.classList.remove('bg-yellow-500'); navControlButton.classList.add('bg-green-500');
+        stopGpsTracking();
+    }
 
-            // 위도는 북쪽이 위 (픽셀 Y=0)이므로 반전
-            const x = ((lon - mapBounds.minLon) / lonRange) * drawWidth + offsetX;
-            const y = drawHeight - (((lat - mapBounds.minLat) / latRange) * drawHeight) + offsetY;
-            
-            return { x, y };
-        }
-        
-        // --- GPS 위치 추적 로직 ---
+    function handleArrival() {
+        stopNavigation();
+        navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
+        document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
+        navControlButton.innerText = '경로 재설정';
+        navControlButton.classList.remove('bg-yellow-500','bg-green-500'); navControlButton.classList.add('bg-blue-600');
+        navControlButton.disabled = false;
+        document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="check-circle" class="w-8 h-8"></i>`;
+        highlightStep(currentStepIndex-1, true);
+        updateGpsStatus("ok","성공적으로 목적지에 도착했습니다.");
+        lucide.createIcons();
+    }
 
-        /**
-         * GPS 위치 추적을 시작합니다.
-         */
-        function startGpsTracking() {
-            if (!navigator.geolocation) {
-                updateGpsStatus("error", "오류: 이 브라우저는 GPS(Geolocation)를 지원하지 않습니다.");
-                return;
-            }
+    // UI 업데이트 / 렌더
+    function updateGpsStatus(type, message) {
+        gpsStatusMessage.textContent = `GPS 상태: ${message}`;
+        gpsStatusMessage.classList.remove('gps-status-ok','gps-status-err');
+        if (type === 'ok') gpsStatusMessage.classList.add('gps-status-ok'); else gpsStatusMessage.classList.add('gps-status-err');
+    }
 
-            if (gpsWatchId) {
-                navigator.geolocation.clearWatch(gpsWatchId);
-            }
+    function renderGuidanceSummary(data) {
+        const pathSummary = data.optimal_path_areas.map(id => AREA_NAMES[id]).join(' → ');
+        outputDiv.innerHTML = `
+            <div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg">
+                <p class="text-md text-gray-700 font-semibold">
+                    <span class="text-green-700">출발지: ${AREA_NAMES[data.start_area_id]}</span>
+                    <span class="mx-3 text-gray-400">|</span>
+                    <span class="text-red-700">최종 목적지: ${AREA_NAMES[data.end_area_id]}</span>
+                </p>
+                <p class="text-2xl font-extrabold text-gray-900 mt-2">
+                    총 예상 소요 시간: <span class="text-blue-600">${data.total_time_min}분</span>
+                    <span class="text-lg font-medium text-gray-500">(${Math.round(data.total_distance_m)}m)</span>
+                </p>
+                <p class="text-sm text-gray-500 mt-1 truncate">경로 요약: ${pathSummary}</p>
+            </div>
+        `;
+        document.getElementById('nav-next-instruction').textContent = 'GPS 내비게이션이 시작되었습니다.';
+        document.getElementById('nav-step-info').textContent = `총 거리: ${Math.round(data.total_distance_m)}m | 총 시간: ${data.total_time_min}분`;
+        document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
+        lucide.createIcons();
+    }
 
-            // GPS 위치 추적 시작
-            gpsWatchId = navigator.geolocation.watchPosition(
-                handleGpsSuccess, 
-                handleGpsError, 
-                {
-                    enableHighAccuracy: true, 
-                    timeout: 5000, 
-                    maximumAge: 0 
-                }
-            );
-            updateGpsStatus("ok", "GPS 추적 시작. 위치 권한을 승인하고 이동하세요.");
-        }
-
-        /**
-         * GPS 위치 획득 성공 시 호출되는 콜백 함수.
-         */
-        function handleGpsSuccess(position) {
-            const { latitude, longitude, accuracy, heading } = position.coords;
-            
-            // 1. 사용자 GPS 위치 및 방향 업데이트
-            userGpsPosition = { lat: latitude, lon: longitude };
-            // heading이 null이 아니거나 유효할 때만 업데이트
-            if (heading !== null && !isNaN(heading)) {
-                userGpsHeading = heading;
-            }
-
-            // GPS 상태 업데이트
-            updateGpsStatus("ok", `현재 GPS 위치 수신됨. 정확도: ${Math.round(accuracy)}m`);
-
-            // 경로 안내 중일 때만 업데이트 로직 실행
-            if (isNavigating && lastRouteData && lastRouteData.steps.length > currentStepIndex) {
-                updateGpsPosition(userGpsPosition);
-            }
-            
-            // 사용자 위치가 업데이트되었으므로 맵을 다시 그립니다.
-            drawMap(); 
-        }
-
-        /**
-         * GPS 위치 획득 실패 시 호출되는 콜백 함수.
-         */
-        function handleGpsError(error) {
-            let message = "";
-            switch (error.code) {
-                case error.PERMISSION_DENIED:
-                    message = "오류: 위치 정보 접근이 거부되었습니다. (권한 필요)";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    message = "오류: 위치 정보를 사용할 수 없습니다. (GPS 신호 불량)";
-                    break;
-                case error.TIMEOUT:
-                    message = "오류: 위치 정보 요청 시간이 초과되었습니다.";
-                    break;
-                default:
-                    message = "알 수 없는 GPS 오류가 발생했습니다.";
-            }
-            updateGpsStatus("error", message);
-            stopGpsTracking();
-        }
-        
-        /**
-         * GPS 위치 추적을 중지합니다.
-         */
-        function stopGpsTracking() {
-            if (gpsWatchId) {
-                navigator.geolocation.clearWatch(gpsWatchId);
-                gpsWatchId = null;
-            }
-            updateGpsStatus("error", "GPS 추적 중지됨. 내비게이션 비활성화.");
-        }
-
-        /**
-         * 사용자의 최신 GPS 위치를 기반으로 내비게이션 상태를 업데이트합니다.
-         */
-        function updateGpsPosition(currentGps) {
-            if (!lastRouteData || !lastRouteData.steps || currentStepIndex >= lastRouteData.steps.length) {
-                return; // 내비게이션 종료 상태
-            }
-
-            const currentStep = lastRouteData.steps[currentStepIndex];
-            const targetAreaId = currentStep.to_area;
-            const targetGps = AREA_COORDINATES[targetAreaId];
-            
-            if (!targetGps) return;
-
-            // 1. 목표 지점까지의 남은 거리 계산
-            const distanceToTarget = calculateDistance(
-                currentGps.lat, currentGps.lon, 
-                targetGps.lat, targetGps.lon
-            );
-
-            // 2. 네비게이션 바 업데이트
-            updateNavigationBar(currentStep, distanceToTarget);
-            highlightStep(currentStepIndex);
-
-            // 3. 근접성(Proximity) 확인: 목표 지점에 충분히 가까워졌는지 확인
-            if (distanceToTarget < DISTANCE_THRESHOLD) {
-                // 다음 단계로 이동
-                currentStepIndex++;
-
-                // 최종 도착 확인
-                if (currentStepIndex >= lastRouteData.steps.length) {
-                    handleArrival();
-                    return;
-                }
-                
-                // 다음 단계 정보로 업데이트
-                const nextStep = lastRouteData.steps[currentStepIndex];
-                // 다음 단계의 목표까지의 남은 거리로 네비게이션 바 업데이트
-                updateNavigationBar(nextStep, calculateDistance(currentGps.lat, currentGps.lon, AREA_COORDINATES[nextStep.to_area].lat, AREA_COORDINATES[nextStep.to_area].lon));
-            }
-        }
-        
-        // --- 맵 드로잉 로직 ---
-
-        /**
-         * 맵에 구역, 최적 경로, 사용자 위치를 시각화합니다.
-         */
-        function drawMap() {
-            resizeCanvas(); 
-            ctx.clearRect(0, 0, canvas.width, canvas.height); 
-            
-            const data = lastRouteData || {};
-            const optimalPath = data.optimal_path_areas || [];
-
-            // 1. 모든 연결선 (Map Background) 그리기
-            ctx.strokeStyle = '#e5e7eb'; 
-            ctx.lineWidth = 2;
-            ALL_CONNECTIONS.forEach(conn => {
-                const start = latLonToCanvas(AREA_COORDINATES[conn.u].lat, AREA_COORDINATES[conn.u].lon);
-                const end = latLonToCanvas(AREA_COORDINATES[conn.v].lat, AREA_COORDINATES[conn.v].lon);
-                
-                ctx.beginPath();
-                ctx.moveTo(start.x, start.y);
-                ctx.lineTo(end.x, end.y);
-                ctx.stroke();
-            });
-
-            // 2. 최적 경로 선 그리기
-            if (optimalPath.length > 1) {
-                ctx.strokeStyle = '#ef4444'; 
-                ctx.lineWidth = 5;
-                ctx.lineCap = 'round';
-                
-                ctx.beginPath();
-                let firstPoint = true;
-                for (const areaId of optimalPath) {
-                    const coord = latLonToCanvas(AREA_COORDINATES[areaId].lat, AREA_COORDINATES[areaId].lon);
-                    if (firstPoint) {
-                        ctx.moveTo(coord.x, coord.y);
-                        firstPoint = false;
-                    } else {
-                        ctx.lineTo(coord.x, coord.y);
-                    }
-                }
-                ctx.stroke();
-            }
-
-            // 3. 사용자 위치 마커 그리기 (실제 GPS 위치 및 방향)
-            if (isNavigating && userGpsPosition) {
-                const userCanvasCoord = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
-                
-                // **[핵심]** 사용자 마커 (방향 표시가 있는 삼각형)
-                const arrowSize = 15;
-                // GPS Heading은 북쪽(0도)을 기준으로 시계 방향입니다.
-                // Canvas는 Y축이 아래로 증가하므로, Heading을 라디안으로 변환할 때 0도(북쪽)가 위쪽(-Y)을 향하도록 조정합니다.
-                const rotation = userGpsHeading * (Math.PI / 180); 
-                
-                ctx.save(); // 현재 Canvas 상태 저장
-                ctx.translate(userCanvasCoord.x, userCanvasCoord.y); // 마커 중심으로 이동
-                ctx.rotate(rotation); // Heading 값만큼 회전 (0도는 위쪽)
-
-                ctx.fillStyle = '#10b981'; // 초록색
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 3;
-
-                // 삼각형 경로 정의 (위쪽을 향함)
-                ctx.beginPath();
-                ctx.moveTo(0, -arrowSize); // 끝점 (화살표 머리)
-                ctx.lineTo(-arrowSize * 0.7, arrowSize * 0.5); // 왼쪽 아래
-                ctx.lineTo(arrowSize * 0.7, arrowSize * 0.5);  // 오른쪽 아래
-                ctx.closePath();
-
-                ctx.fill();
-                ctx.stroke();
-                
-                ctx.restore(); // Canvas 상태 복원 (이전 위치, 회전 상태로 돌아옴)
-
-                // GPS가 켜져 있을 때 현재 단계의 목표 노드를 표시
-                if (currentStepIndex < lastRouteData.steps.length) {
-                    const targetId = lastRouteData.steps[currentStepIndex].to_area;
-                    const targetCoord = latLonToCanvas(AREA_COORDINATES[targetId].lat, AREA_COORDINATES[targetId].lon);
-                    
-                    // 목표 지점까지 점선 표시
-                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
-                    ctx.setLineDash([5, 5]); 
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(userCanvasCoord.x, userCanvasCoord.y);
-                    ctx.lineTo(targetCoord.x, targetCoord.y);
-                    ctx.stroke();
-                    ctx.setLineDash([]); // 점선 설정 해제
-                }
-            }
-            
-            // 4. 모든 구역 노드와 라벨 그리기
-            const areaData = data.optimal_path_areas || [];
-            AREA_IDS.forEach(id => {
-                const coord = latLonToCanvas(AREA_COORDINATES[id].lat, AREA_COORDINATES[id].lon);
-                
-                const isStart = id === data.start_area_id;
-                const isEnd = id === data.end_area_id;
-
-                // 노드 색상 설정
-                if (isStart) {
-                    ctx.fillStyle = '#3b82f6'; // 파란색 (Start)
-                } else if (isEnd) {
-                    ctx.fillStyle = '#ef4444'; // 빨간색 (End)
-                } else {
-                    ctx.fillStyle = '#9ca3af'; // 회색 (Other)
-                }
-                
-                // 노드 원 그리기
-                ctx.beginPath();
-                ctx.arc(coord.x, coord.y, isStart || isEnd ? 8 : 5, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 노드 라벨 텍스트
-                ctx.fillStyle = '#1f2937';
-                ctx.font = `12px Inter`;
-                ctx.textAlign = 'center';
-                
-                // 라벨 위치 조정 (간단화)
-                ctx.fillText(`${id}`, coord.x, coord.y - 15);
-            });
-        }
-
-        // --- 경로 검색 (Dijkstra) ---
-
-        function findOptimalRoute(startNode, endNode) {
-            const distances = {};
-            const previousNodes = {};
-            const priorityQueue = new Set();
-            
-            AREA_IDS.forEach(id => {
-                distances[id] = Infinity;
-                previousNodes[id] = null;
-            });
-
-            distances[startNode] = 0;
-            priorityQueue.add(startNode);
-
-            const getMinNode = () => {
-                let minTime = Infinity;
-                let minNode = null;
-                priorityQueue.forEach(node => {
-                    if (distances[node] < minTime) {
-                        minTime = distances[node];
-                        minNode = node;
-                    }
-                });
-                return minNode;
-            };
-
-            while (priorityQueue.size > 0) {
-                const currentNode = getMinNode();
-                if (!currentNode) break;
-
-                priorityQueue.delete(currentNode);
-
-                const neighbors = ALL_CONNECTIONS.filter(conn => conn.u === currentNode);
-
-                for (const neighbor of neighbors) {
-                    const nextNode = neighbor.v;
-                    const travelTime = neighbor.time;
-                    const newTime = distances[currentNode] + travelTime;
-
-                    if (newTime < distances[nextNode]) {
-                        distances[nextNode] = newTime;
-                        previousNodes[nextNode] = currentNode;
-                        priorityQueue.add(nextNode);
-                    }
-                }
-            }
-
-            let path = [];
-            let currentNode = endNode;
-            while (currentNode) {
-                path.unshift(currentNode);
-                currentNode = previousNodes[currentNode];
-                 if (currentNode === startNode) { 
-                    path.unshift(startNode);
-                    break;
-                 }
-                 if (!currentNode && path[0] === startNode) break; 
-                 if (!currentNode && path.length > 0) break; 
-                 if (!currentNode) break; 
-            }
-
-            if (path[0] !== startNode || path[path.length - 1] !== endNode) {
-                return { total_time_min: Infinity, optimal_path_areas: [] };
-            }
-            
-            return { total_time_min: distances[endNode], optimal_path_areas: path };
-        }
-
-        function createRouteGuidance(optimalPath, totalTime) {
-            if (!optimalPath || optimalPath.length < 2) return { steps: [], total_distance_m: 0, total_time_min: 0 };
-            
-            const steps = [];
-            let totalDistance = 0;
-            
-            for (let i = 0; i < optimalPath.length - 1; i++) {
-                const from_area = optimalPath[i];
-                const to_area = optimalPath[i+1];
-                
-                const connection = ALL_CONNECTIONS.find(conn => conn.u === from_area && conn.v === to_area);
-                if (!connection) continue;
-                
-                const { distance, time, turn, instruction } = connection;
-                totalDistance += distance;
-
-                const is_last_step = (i === optimalPath.length - 2);
-                const final_turn_type = is_last_step ? "도착" : turn;
-                const final_instruction = is_last_step 
-                    ? `최종 목적지인 ${AREA_NAMES[to_area]}에 도착했습니다. 경로 안내를 종료합니다.` 
-                    : `${instruction} 후 ${AREA_NAMES[to_area]} 방향으로 이동합니다.`;
-                
-                steps.push({
-                    "step_id": i + 1,
-                    "from_area": from_area,
-                    "to_area": to_area,
-                    "distance_m": distance,
-                    "travel_time_min": time, 
-                    "turn_type": final_turn_type,
-                    "detailed_instruction": final_instruction
-                });
-            }
-            
-            return { steps: steps, total_distance_m: totalDistance, total_time_min: totalTime };
-        }
-        
-        // --- 맵 이동 및 내비게이션 시작 로직 ---
-
-        /**
-         * 맵 전체의 좌표를 사용자의 위치 기반으로 이동시키는 함수
-         * @param {number} currentLat 현재 GPS 위도
-         * @param {number} currentLon 현재 GPS 경도
-         */
-        function applyGpsOffsetToMap(currentLat, currentLon) {
-            const startAreaId = lastRouteData.start_area_id;
-
-            // 가상 맵의 출발 지점 원본 좌표
-            const baseLat = ORIGINAL_AREA_COORDINATES[startAreaId].lat;
-            const baseLon = ORIGINAL_AREA_COORDINATES[startAreaId].lon;
-            
-            // 오프셋 계산 (실제 위치 - 가상 시작 위치)
-            const deltaLat = currentLat - baseLat;
-            const deltaLon = currentLon - baseLon;
-
-            // 모든 노드에 오프셋 적용
-            AREA_IDS.forEach(id => {
-                AREA_COORDINATES[id].lat = ORIGINAL_AREA_COORDINATES[id].lat + deltaLat;
-                AREA_COORDINATES[id].lon = ORIGINAL_AREA_COORDINATES[id].lon + deltaLon;
-            });
-
-            // 맵 경계 재계산 (Canvas 렌더링을 위해 필수)
-            recalculateMapBounds();
-            drawMap();
-        }
-
-
-        /**
-         * 경로 검색 및 내비게이션 데이터 준비
-         */
-        function startRouteGuidance() {
-            if (isNavigating) stopNavigation(); 
-
-            const startId = startSelect.value;
-            const endId = endSelect.value;
-            
-            if (startId === endId) {
-                outputDiv.innerHTML = `<div class="p-4 bg-yellow-100 rounded-lg text-yellow-700">출발지와 도착지가 동일합니다.</div>`;
-                navBar.classList.remove('active');
-                return;
-            }
-
-            searchButton.disabled = true;
-            searchButton.innerText = '경로 계산 중...';
-
-            const { total_time_min, optimal_path_areas } = findOptimalRoute(startId, endId);
-            
-            if (total_time_min === Infinity) {
-                outputDiv.innerHTML = `<div class="p-4 bg-red-100 rounded-lg text-red-700">경로를 찾을 수 없습니다!</div>`;
-                searchButton.disabled = false;
-                searchButton.innerText = '경로 검색 및 내비게이션 준비';
-                navBar.classList.remove('active');
-                return;
-            }
-
-            const { steps, total_distance_m } = createRouteGuidance(optimal_path_areas, total_time_min);
-            
-            lastRouteData = {
-                start_area_id: startId,
-                end_area_id: endId,
-                optimal_path_areas: optimal_path_areas,
-                total_time_min: Math.ceil(total_time_min), 
-                total_distance_m: total_distance_m,
-                steps: steps
-            };
-            
-            currentStepIndex = 0;
-            
-            renderGuidanceSummary(lastRouteData);
-            renderStepsList(lastRouteData.steps);
-            drawMap(); 
-            
-            navBar.classList.add('active'); 
-            navControlButton.innerText = 'GPS 내비 중지';
-            navControlButton.disabled = false;
-            navControlButton.classList.remove('bg-green-500', 'bg-blue-600', 'bg-yellow-500');
-            navControlButton.classList.add('bg-yellow-500');
-            
-            searchButton.disabled = false;
-            searchButton.innerText = '경로 검색 및 내비게이션 준비';
-            
-            // **[자동 시작]** 경로 검색 완료 후, 자동으로 GPS 내비게이션을 시작합니다.
-            startNavigation(true); // isAutoStart=true
-        }
-        
-        /**
-         * 내비게이션 시작/중지 토글
-         */
-        function toggleNavigation() {
-            if (!lastRouteData) return;
-            
-            if (navControlButton.innerText === '경로 재설정') {
-                resetApp();
-                return;
-            }
-            
-            if (isNavigating) {
-                stopNavigation();
-            } else {
-                startNavigation(false); // isAutoStart=false
-            }
-        }
-
-        /**
-         * 내비게이션 시작
-         */
-        function startNavigation(isAutoStart = false) {
-            if (!navigator.geolocation) {
-                updateGpsStatus("error", "오류: 이 브라우저는 GPS(Geolocation)를 지원하지 않습니다.");
-                return;
-            }
-
-            if (isNavigating) return;
-
-            isNavigating = true;
-
-            if (!isAutoStart) {
-                navControlButton.innerText = 'GPS 내비 중지';
-                navControlButton.classList.remove('bg-green-500');
-                navControlButton.classList.add('bg-yellow-500');
-            }
-            
-            // 1. **[핵심 로직]** GPS 위치를 한 번만 요청하여 맵 오프셋 계산 및 적용
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    
-                    // 맵 이동 로직 실행: 가상 맵 전체를 현재 위치로 이동
-                    applyGpsOffsetToMap(latitude, longitude);
-
-                    // 2. 맵 좌표 이동 후, 실시간 GPS 추적을 시작합니다.
-                    startGpsTracking(); 
-                }, 
-                (error) => {
-                    // 위치 획득 실패 시, 맵 이동 없이 추적만 시작 (기존 좌표로 실행)
-                    updateGpsStatus("error", "GPS 초기 위치 획득 실패. 기존 가상 좌표로 내비게이션을 시작합니다.");
-                    startGpsTracking(); 
-                },
-                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-            );
-
-
-            if (currentStepIndex < lastRouteData.steps.length) {
-                updateNavigationBar(lastRouteData.steps[currentStepIndex], 0); 
-                highlightStep(currentStepIndex);
-            }
-        }
-        
-        /**
-         * 내비게이션 중지
-         */
-        function stopNavigation() {
-            isNavigating = false;
-            navControlButton.innerText = 'GPS 내비 재개';
-            navControlButton.classList.remove('bg-yellow-500');
-            navControlButton.classList.add('bg-green-500');
-            
-            // **GPS 추적 중지**
-            stopGpsTracking();
-        }
-
-        /**
-         * 최종 도착 처리
-         */
-        function handleArrival() {
-            stopNavigation(); 
-            navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
-            document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
-            navControlButton.innerText = '경로 재설정';
-            navControlButton.classList.remove('bg-yellow-500', 'bg-green-500');
-            navControlButton.classList.add('bg-blue-600');
-            navControlButton.disabled = false;
-            document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="check-circle" class="w-8 h-8"></i>`;
-            highlightStep(currentStepIndex - 1, true); 
-            updateGpsStatus("ok", "성공적으로 목적지에 도착했습니다.");
-            lucide.createIcons();
-        }
-
-
-        // --- UI 업데이트 함수 ---
-        
-        function updateGpsStatus(type, message) {
-            gpsStatusMessage.textContent = `GPS 상태: ${message}`;
-            gpsStatusMessage.classList.remove('gps-status-ok', 'gps-status-err');
-            if (type === 'ok') {
-                gpsStatusMessage.classList.add('gps-status-ok');
-            } else {
-                gpsStatusMessage.classList.add('gps-status-err');
-            }
-        }
-
-        function renderGuidanceSummary(data) {
-            const pathSummary = data.optimal_path_areas.map(id => AREA_NAMES[id]).join(' → ');
-
-            outputDiv.innerHTML = `
-                <div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg">
-                    <p class="text-md text-gray-700 font-semibold">
-                        <span class="text-green-700">출발지: ${AREA_NAMES[data.start_area_id]}</span>
-                        <span class="mx-3 text-gray-400">|</span>
-                        <span class="text-red-700">최종 목적지: ${AREA_NAMES[data.end_area_id]}</span>
-                    </p>
-                    <p class="text-2xl font-extrabold text-gray-900 mt-2">
-                        총 예상 소요 시간: <span class="text-blue-600">${data.total_time_min}분</span>
-                        <span class="text-lg font-medium text-gray-500">(${Math.round(data.total_distance_m)}m)</span>
-                    </p>
-                    <p class="text-sm text-gray-500 mt-1 truncate">경로 요약: ${pathSummary}</p>
+    function renderStepsList(steps) {
+        let html = '';
+        steps.forEach((step, idx) => {
+            const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
+            const iconColor = step.turn_type === '도착' ? 'text-green-600' : 'text-blue-600';
+            html += `
+                <div id="step-${idx}" class="flex items-start mb-4 p-3 bg-white rounded-lg border-l-4 border-gray-200 transition duration-100">
+                    <div class="flex-shrink-0 text-2xl font-bold mr-4 p-2 rounded-full bg-gray-50 shadow ${iconColor}">
+                        <i data-lucide="${iconName}" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-grow">
+                        <p class="font-semibold text-md text-gray-800 leading-snug">${step.detailed_instruction}</p>
+                        <p class="text-xs text-gray-500 mt-1">${AREA_NAMES[step.from_area]} → ${AREA_NAMES[step.to_area]} (${step.travel_time_min}분, ${Math.round(step.distance_m)}m)</p>
+                    </div>
                 </div>
             `;
-            // 하단 내비게이션 바 초기화
-            document.getElementById('nav-next-instruction').textContent = 'GPS 내비게이션이 시작되었습니다.';
-            document.getElementById('nav-step-info').textContent = `총 거리: ${Math.round(data.total_distance_m)}m | 총 시간: ${data.total_time_min}분`;
-            document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
-            lucide.createIcons();
-        }
+        });
+        stepsListDiv.innerHTML = html;
+        stepsListDiv.classList.remove('hidden');
+        lucide.createIcons();
+    }
 
-        function renderStepsList(steps) {
-            let stepsHtml = '';
-            steps.forEach((step, index) => {
-                const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
-                const iconColor = step.turn_type === '도착' ? 'text-green-600' : 'text-blue-600';
-                
-                // 상세 지침 목록에서는 경로 계산 시 사용된 고정 시간을 표시
-                stepsHtml += `
-                    <div id="step-${index}" class="flex items-start mb-4 p-3 bg-white rounded-lg border-l-4 border-gray-200 transition duration-100">
-                        <div class="flex-shrink-0 text-2xl font-bold mr-4 p-2 rounded-full bg-gray-50 shadow ${iconColor}">
-                            <i data-lucide="${iconName}" class="w-5 h-5"></i>
-                        </div>
-                        <div class="flex-grow">
-                            <p class="font-semibold text-md text-gray-800 leading-snug">${step.detailed_instruction}</p>
-                            <p class="text-xs text-gray-500 mt-1">
-                                ${AREA_NAMES[step.from_area]} → ${AREA_NAMES[step.to_area]} (${step.travel_time_min}분, ${Math.round(step.distance_m)}m)
-                            </p>
-                        </div>
-                    </div>
-                `;
-            });
-            stepsListDiv.innerHTML = stepsHtml;
-            stepsListDiv.classList.remove('hidden');
-            lucide.createIcons();
+    function updateNavigationBar(step, distanceToTarget) {
+        navInstruction.textContent = step.detailed_instruction;
+        const remainingTimeSeconds = distanceToTarget / AVERAGE_SPEED_MPS;
+        const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds/60));
+        if (step.turn_type === '도착') {
+            document.getElementById('nav-step-info').textContent = '목적지에 거의 도착했습니다.';
+        } else {
+            document.getElementById('nav-step-info').textContent = `다음 지점까지 ${Math.round(distanceToTarget)}m 남음 | 약 ${remainingTimeMinutes}분 예상 (현재 방향: ${Math.round(userGpsHeading)}°)`;
         }
-        
-        /**
-         * 네비게이션 바를 업데이트합니다. (거리 기반 동적 시간 계산)
-         */
-        function updateNavigationBar(step, distanceToTarget) {
-            navInstruction.textContent = step.detailed_instruction;
-            
-            // **핵심 로직**: 남은 거리를 기반으로 동적 남은 시간 계산
-            const remainingTimeSeconds = distanceToTarget / AVERAGE_SPEED_MPS; // 초 단위
-            // 최소 1분으로 설정 (150m 거리에 맞춰 조정)
-            const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds / 60)); 
+        const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
+        document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="${iconName}" class="w-8 h-8"></i>`;
+        lucide.createIcons();
+    }
 
-            if (step.turn_type === '도착') {
-                 document.getElementById('nav-step-info').textContent = '목적지에 거의 도착했습니다.';
-            } else {
-                 // 남은 거리에 비례하여 계산된 남은 시간을 표시
-                 document.getElementById('nav-step-info').textContent = `다음 지점까지 ${Math.round(distanceToTarget)}m 남음 | 약 ${remainingTimeMinutes}분 예상 (현재 방향: ${Math.round(userGpsHeading)}°)`;
+    function highlightStep(index, isFinal=false) {
+        document.querySelectorAll('#steps-list > div').forEach((el,i) => {
+            el.classList.remove('bg-blue-100','border-blue-500','bg-green-100','border-green-500');
+            if (i === index) {
+                if (isFinal) el.classList.add('bg-green-100','border-green-500'); else el.classList.add('bg-blue-100','border-blue-500');
+                el.scrollIntoView({ behavior:'smooth', block:'nearest' });
             }
+        });
+    }
 
-            const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
-            document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="${iconName}" class="w-8 h-8"></i>`;
-            lucide.createIcons();
-        }
+    function resetApp() {
+        stopGpsTracking();
+        lastRouteData = null;
+        isNavigating = false;
+        currentStepIndex = 0;
+        userGpsPosition = null;
+        userGpsHeading = 0;
+        AREA_IDS.forEach(id => { AREA_COORDINATES[id].lat = ORIGINAL_AREA_COORDINATES[id].lat; AREA_COORDINATES[id].lon = ORIGINAL_AREA_COORDINATES[id].lon; });
+        recalculateMapBounds();
+        drawMap();
+        navBar.classList.remove('active');
+        outputDiv.innerHTML = `<p class="text-gray-500">지도를 시각화하기 위해 출발지 및 도착지를 설정하고 버튼을 눌러주세요.</p>`;
+        stepsListDiv.classList.add('hidden');
+        navControlButton.innerText = 'GPS 내비 시작';
+        navControlButton.disabled = true;
+        navControlButton.classList.remove('bg-yellow-500','bg-blue-600');
+        navControlButton.classList.add('bg-green-500');
+        document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
+        updateGpsStatus("error","내비게이션이 초기화되었습니다. 경로를 다시 검색해 주세요.");
+        lucide.createIcons();
+    }
 
-        function highlightStep(index, isFinal = false) {
-            document.querySelectorAll('#steps-list > div').forEach((el, i) => {
-                el.classList.remove('bg-blue-100', 'border-blue-500', 'bg-green-100', 'border-green-500');
-                if (i === index) {
-                    if (isFinal) {
-                        el.classList.add('bg-green-100', 'border-green-500');
-                    } else {
-                        el.classList.add('bg-blue-100', 'border-blue-500');
-                    }
-                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-            });
-        }
-        
-        function resetApp() {
-            stopGpsTracking();
-            lastRouteData = null;
-            isNavigating = false;
-            currentStepIndex = 0;
-            userGpsPosition = null;
-            userGpsHeading = 0; // 방향도 초기화
-            
-            // **[복원]** AREA_COORDINATES를 원본으로 복원
-            AREA_IDS.forEach(id => {
-                AREA_COORDINATES[id].lat = ORIGINAL_AREA_COORDINATES[id].lat;
-                AREA_COORDINATES[id].lon = ORIGINAL_AREA_COORDINATES[id].lon;
-            });
-            recalculateMapBounds(); // 맵 경계도 원본으로 복원
-            
-            drawMap();
-            navBar.classList.remove('active');
-            outputDiv.innerHTML = `<p class="text-gray-500">지도를 시각화하기 위해 출발지 및 도착지를 설정하고 버튼을 눌러주세요.</p>`;
-            stepsListDiv.classList.add('hidden');
-            navControlButton.innerText = 'GPS 내비 시작';
-            navControlButton.disabled = true;
-            navControlButton.classList.remove('bg-yellow-500', 'bg-blue-600');
-            navControlButton.classList.add('bg-green-500');
-            document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
-            updateGpsStatus("error", "내비게이션이 초기화되었습니다. 경로를 다시 검색해 주세요.");
-            lucide.createIcons();
-        }
-        
-        // --- 초기화 및 이벤트 리스너 ---
+    // 초기화 및 이벤트
+    function populateAreaSelects() {
+        AREA_IDS.forEach(id => {
+            const name = AREA_NAMES[id];
+            startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
+            endSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
+        });
+        startSelect.value = 'A';
+        endSelect.value = 'I';
+    }
 
-        function populateAreaSelects() {
-            // AREA_IDS는 이제 A-I 9개
-            AREA_IDS.forEach(id => {
-                const name = AREA_NAMES[id];
-                startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
-                endSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
-            });
-            startSelect.value = 'A'; 
-            endSelect.value = 'I'; // 3x3 대각선 끝으로 기본 설정 유지
-        }
+    window.onload = function() {
+        populateAreaSelects();
+        resizeCanvas();
+        drawMap();
+        document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
+        updateGpsStatus("error","내비게이션을 시작하려면 '경로 검색'을 누르세요.");
+        lucide.createIcons();
+        searchButton.addEventListener('click', startRouteGuidance);
+        navControlButton.addEventListener('click', toggleNavigation);
+    };
 
-        function resizeCanvas() {
-            const containerWidth = canvas.parentElement.clientWidth;
-            canvas.width = Math.min(containerWidth, 700); 
-            canvas.height = canvas.width * (400 / 700); 
-            if (canvas.height < 250) canvas.height = 250; 
-        }
-
-        window.onload = function() {
-            populateAreaSelects();
-            resizeCanvas(); 
-            drawMap(); 
-            document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
-            updateGpsStatus("error", "내비게이션을 시작하려면 '경로 검색'을 누르세요.");
-            lucide.createIcons();
-
-            // 이벤트 리스너 연결
-            searchButton.addEventListener('click', startRouteGuidance);
-            navControlButton.addEventListener('click', toggleNavigation);
-        };
-
-        window.addEventListener('resize', drawMap); 
+    window.addEventListener('resize', drawMap);
     </script>
 </body>
 </html>
