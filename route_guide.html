@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (V0.3)</title>
+    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (가상 이동, 줌/팬)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -24,7 +24,7 @@
 </head>
 <body class="p-4 sm:p-8">
     <div class="container mx-auto pb-40">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션 (V0.3)</h1>
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션 (가상 이동, 줌/팬)</h1>
 
         <div class="card p-6 rounded-xl mb-6">
             <div id="gps-status-message" class="p-3 mb-4 rounded-lg text-sm font-medium gps-status-err">
@@ -118,13 +118,17 @@
     let userGpsHeading = 0; 
     let deviceOrientationAlpha = 0;
 
-    // 맵 상호작용 상태 변수 🌟 추가된 부분 🌟
+    // 맵 상호작용 상태 변수
     let mapScale = 1.0;          // 현재 확대/축소 배율 (1.0 = 기본)
     let mapTranslateX = 0;       // X축 이동 오프셋 (픽셀)
     let mapTranslateY = 0;       // Y축 이동 오프셋 (픽셀)
     let isDragging = false;      // 마우스/터치 드래그 상태
     let lastMouseX, lastMouseY;  // 마지막 마우스/터치 위치
     let initialTouches = [];     // 핀치 줌을 위한 초기 두 손가락 좌표
+
+    // 줌 레벨 제한 상수 🌟 0.6으로 변경 🌟
+    const MIN_MAP_SCALE = 0.6; 
+    const MAX_MAP_SCALE = 5.0; 
 
     const DISTANCE_THRESHOLD = 50; // 근접 기준 (미터)
     const SIMULATION_SPEED_MPS = 1.0; // 시뮬레이션 이동 속도: 1.0 m/s (3.6 km/h)
@@ -169,7 +173,7 @@
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c;
     }
 
-    /** 위경도 to 캔버스 픽셀 변환 (줌/팬 적용) 🌟 수정된 부분 🌟 */
+    /** 위경도 to 캔버스 픽셀 변환 (줌/팬 적용) */
     function latLonToCanvas(lat, lon) { 
         const latRange = (mapBounds.maxLat - mapBounds.minLat) || 0.0000001;
         const lonRange = (mapBounds.maxLon - mapBounds.minLon) || 0.0000001;
@@ -199,7 +203,7 @@
     }
 
     // -------------------------
-    // 맵 상호작용 이벤트 핸들러 🌟 추가된 부분 🌟
+    // 맵 상호작용 이벤트 핸들러
     // -------------------------
 
     function setupMapInteractions() {
@@ -233,14 +237,15 @@
         
         drawMap();
     }
+    /** 휠 이벤트 핸들러 🌟 최소 스케일 0.6 적용 🌟 */
     function handleWheel(e) {
         e.preventDefault(); 
         const scaleFactor = 1.1; 
         
-        // 줌 중심을 마우스 커서 위치로 지정할 수도 있지만, 여기서는 간편하게 캔버스 중앙 기준으로 처리합니다.
         if (e.deltaY < 0) { mapScale *= scaleFactor; } else { mapScale /= scaleFactor; }
         
-        mapScale = Math.max(1.0, Math.min(5.0, mapScale)); // 줌 레벨 제한
+        // 최소 스케일을 0.6으로 제한
+        mapScale = Math.max(MIN_MAP_SCALE, Math.min(MAX_MAP_SCALE, mapScale));
         drawMap();
     }
 
@@ -260,10 +265,11 @@
 
     function handleTouchEnd(e) {
         isDragging = false;
-        // 터치 끝난 후 남아있는 터치만 남김 (핀치 줌 연속성을 위해)
+        // 터치 끝난 후 남아있는 터치만 남김
         initialTouches = Array.from(e.touches); 
     }
 
+    /** 터치 이동 핸들러 🌟 최소 스케일 0.6 적용 🌟 */
     function handleTouchMove(e) {
         e.preventDefault();
 
@@ -289,9 +295,9 @@
             const scaleChange = currentDistance / initialDistance;
             mapScale *= scaleChange;
             
-            mapScale = Math.max(1.0, Math.min(5.0, mapScale)); // 줌 레벨 제한
+            // 최소 스케일을 0.6으로 제한
+            mapScale = Math.max(MIN_MAP_SCALE, Math.min(MAX_MAP_SCALE, mapScale));
             
-            // 초기 터치 위치를 현재 위치로 업데이트하여 다음 이동 계산 준비
             initialTouches = currentTouches; 
             
             drawMap();
@@ -402,7 +408,7 @@
     }
     
     // -------------------------
-    // 경로 검색 및 UI 렌더링 (경로 검색/생성 함수는 동일하므로 생략)
+    // 경로 검색 및 UI 렌더링
     // -------------------------
 
     function findOptimalRoute(startNode, endNode) { /* ... (Dijkstra 구현) ... */
@@ -604,12 +610,12 @@
         canvas.height = canvas.width * (520/900);
         if (canvas.height < 300) canvas.height = 300;
     }
-    function updateGpsStatus(type, message) { /* ... (생략) ... */
+    function updateGpsStatus(type, message) { 
         gpsStatusMessage.textContent = `시뮬레이션 상태: ${message}`;
         gpsStatusMessage.classList.remove('gps-status-ok','gps-status-err');
         if (type === 'ok') gpsStatusMessage.classList.add('gps-status-ok'); else gpsStatusMessage.classList.add('gps-status-err');
     }
-    function renderGuidanceSummary(data) { /* ... (생략) ... */
+    function renderGuidanceSummary(data) { 
         const pathSummary = data.optimal_path_areas.map(id => AREA_NAMES[id]).join(' → ');
         outputDiv.innerHTML = `
             <div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg">
@@ -630,7 +636,7 @@
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         lucide.createIcons();
     }
-    function highlightStep(index, isArrival = false) { /* ... (생략) ... */
+    function highlightStep(index, isArrival = false) { 
         document.querySelectorAll('#steps-list > div').forEach((el, i) => {
             el.classList.remove('border-blue-600', 'bg-blue-50', 'shadow-lg');
             el.classList.add('border-gray-200', 'bg-white');
@@ -639,7 +645,7 @@
             }
         });
     }
-    function renderStepsList(steps) { /* ... (생략) ... */
+    function renderStepsList(steps) { 
         let html = '';
         steps.forEach((step, idx) => {
             const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
@@ -659,7 +665,7 @@
         lucide.createIcons();
     }
 
-    function updateNavigationBar(step, distanceToTarget) { /* ... (생략) ... */
+    function updateNavigationBar(step, distanceToTarget) { 
         navInstruction.textContent = step.detailed_instruction;
         const remainingTimeSeconds = distanceToTarget / SIMULATION_SPEED_MPS;
         const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds/60)); 
@@ -676,7 +682,7 @@
         lucide.createIcons();
     }
 
-    function handleArrival() { /* ... (생략) ... */
+    function handleArrival() { 
         stopNavigation();
         navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
         document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
@@ -689,12 +695,12 @@
         lucide.createIcons();
     }
     
-    /** 앱 상태 초기화 🌟 줌/팬 초기화 추가 🌟 */
+    /** 앱 상태 초기화 */
     function resetApp() { 
         stopMovementSimulation();
         lastRouteData = null; isNavigating = false; currentStepIndex = 0; userGpsPosition = null; userGpsHeading = 0;
         
-        // 맵 상호작용 초기화 추가
+        // 맵 상호작용 초기화
         mapScale = 1.0;
         mapTranslateX = 0;
         mapTranslateY = 0;
@@ -711,7 +717,7 @@
         lucide.createIcons();
     }
     
-    function loadRouteFromUrl() { /* ... (생략) ... */
+    function loadRouteFromUrl() { 
         const params = new URLSearchParams(window.location.search);
         const startId = params.get('start');
         
@@ -728,7 +734,7 @@
         }
     }
 
-    function populateAreaSelects() { /* ... (생략) ... */
+    function populateAreaSelects() { 
         AREA_IDS.forEach(id => {
             const name = AREA_NAMES[id];
             startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
@@ -741,7 +747,7 @@
         populateAreaSelects();
         resizeCanvas();
         loadRouteFromUrl(); 
-        setupMapInteractions(); // 🌟 맵 상호작용 설정 🌟
+        setupMapInteractions(); 
         drawMap();
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         updateGpsStatus("error","내비게이션을 시작하려면 '경로 검색'을 누르세요.");
