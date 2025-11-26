@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (수동 시작, 줌/팬)</title>
+    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (시야각 복구, 수동 시작)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -24,7 +24,7 @@
 </head>
 <body class="p-4 sm:p-8">
     <div class="container mx-auto pb-40">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션 (수동 시작, 줌/팬)</h1>
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션 (시야각/수동 이동)</h1>
 
         <div class="card p-6 rounded-xl mb-6">
             <div id="gps-status-message" class="p-3 mb-4 rounded-lg text-sm font-medium gps-status-err">
@@ -126,7 +126,7 @@
     let lastMouseX, lastMouseY;  // 마지막 마우스/터치 위치
     let initialTouches = [];     // 핀치 줌을 위한 초기 두 손가락 좌표
 
-    // 줌 레벨 제한 상수 (사용자 요청: 최소 0.6)
+    // 줌 레벨 제한 상수 (최소 0.6)
     const MIN_MAP_SCALE = 0.6; 
     const MAX_MAP_SCALE = 5.0; 
 
@@ -215,7 +215,6 @@
         canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     }
 
-    // 마우스 이벤트 핸들러 (이전과 동일)
     function handleMouseDown(e) { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; }
     function handleMouseUp(e) { isDragging = false; }
     function handleMouseMove(e) {
@@ -304,11 +303,9 @@
         let alpha = event.alpha;
         if (alpha !== null) {
             deviceOrientationAlpha = alpha;
-            if (isNavigating) {
-                // 내비게이션 중일 때만 디바이스 방향을 진행 방향으로 사용
-                userGpsHeading = deviceOrientationAlpha; 
-                drawMap(); 
-            }
+            // 내비게이션 중이 아니더라도 방향은 항상 업데이트
+            userGpsHeading = deviceOrientationAlpha; 
+            drawMap(); 
         }
     }
 
@@ -378,7 +375,6 @@
         navControlButton.innerText = '가상 내비 중지'; 
         navControlButton.classList.remove('bg-green-500'); navControlButton.classList.add('bg-yellow-500');
         
-        // 버튼을 눌렀을 때만 이동 시뮬레이션 시작!
         startMovementSimulation(); 
 
         if (lastRouteData && currentStepIndex < lastRouteData.steps.length) {
@@ -483,7 +479,7 @@
         }
     }
 
-    /** 실제 경로 검색 및 내비게이션 준비 로직 🌟 수정된 부분 🌟 */
+    /** 실제 경로 검색 및 내비게이션 준비 로직 */
     function performRouteSearchAndStartNav(startId, endId) {
         const { total_time_min, optimal_path_areas } = findOptimalRoute(startId, endId);
 
@@ -509,13 +505,12 @@
         navControlButton.classList.add('bg-green-500');
         searchButton.disabled=false; searchButton.innerText='경로 검색 및 내비게이션 준비';
         
-        // 자동 시작을 제거했습니다.
         updateGpsStatus("ok","경로 준비 완료. '가상 내비 시작' 버튼을 눌러 이동을 시작하세요.");
     }
 
 
     // -------------------------
-    // 맵 드로잉 및 UI 업데이트 (이전과 동일)
+    // 맵 드로잉 및 UI 업데이트
     // -------------------------
 
     function drawMap() { 
@@ -545,25 +540,25 @@
         }
 
         // 사용자 위치 (노란색 원, 시야각 부채꼴)
-        if (userGpsPosition) { // 내비게이션 중이 아니더라도 위치는 표시
+        if (userGpsPosition) { // 경로 검색 후 위치가 설정되면 노란색 원 표시
             const user = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
             const accuracyRadius = 25 * mapScale; 
             const userRadius = 10 * mapScale;
             const fieldOfViewAngle = 60; 
 
-            // 1. 진행 방향 시야각 (부채꼴) - 내비 중일 때만 표시
-            if(isNavigating) {
-                const headingRad = userGpsHeading * Math.PI / 180;
-                const startAngle = headingRad - (fieldOfViewAngle * Math.PI / 180 / 2);
-                const endAngle = headingRad + (fieldOfViewAngle * Math.PI / 180 / 2);
+            // 1. 진행 방향 시야각 (부채꼴) - userGpsPosition이 있을 때 (경로 검색 후) 항상 표시
+            // 🌟 수정된 부분: isNavigating 조건 제거 🌟
+            const headingRad = userGpsHeading * Math.PI / 180;
+            const startAngle = headingRad - (fieldOfViewAngle * Math.PI / 180 / 2);
+            const endAngle = headingRad + (fieldOfViewAngle * Math.PI / 180 / 2);
 
-                ctx.beginPath();
-                ctx.moveTo(user.x, user.y);
-                ctx.arc(user.x, user.y, accuracyRadius * 1.5, startAngle, endAngle);
-                ctx.closePath();
-                ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; 
-                ctx.fill();
-            }
+            ctx.beginPath();
+            ctx.moveTo(user.x, user.y);
+            ctx.arc(user.x, user.y, accuracyRadius * 1.5, startAngle, endAngle);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; 
+            ctx.fill();
+
 
             // 2. 사용자 위치 원
             ctx.beginPath();
@@ -610,12 +605,12 @@
         canvas.height = canvas.width * (520/900);
         if (canvas.height < 300) canvas.height = 300;
     }
-    function updateGpsStatus(type, message) { /* ... (생략) ... */
+    function updateGpsStatus(type, message) { 
         gpsStatusMessage.textContent = `시뮬레이션 상태: ${message}`;
         gpsStatusMessage.classList.remove('gps-status-ok','gps-status-err');
         if (type === 'ok') gpsStatusMessage.classList.add('gps-status-ok'); else gpsStatusMessage.classList.add('gps-status-err');
     }
-    function renderGuidanceSummary(data) { /* ... (생략) ... */
+    function renderGuidanceSummary(data) { 
         const pathSummary = data.optimal_path_areas.map(id => AREA_NAMES[id]).join(' → ');
         outputDiv.innerHTML = `
             <div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg">
@@ -636,7 +631,7 @@
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         lucide.createIcons();
     }
-    function highlightStep(index, isArrival = false) { /* ... (생략) ... */
+    function highlightStep(index, isArrival = false) { 
         document.querySelectorAll('#steps-list > div').forEach((el, i) => {
             el.classList.remove('border-blue-600', 'bg-blue-50', 'shadow-lg');
             el.classList.add('border-gray-200', 'bg-white');
@@ -645,7 +640,7 @@
             }
         });
     }
-    function renderStepsList(steps) { /* ... (생략) ... */
+    function renderStepsList(steps) { 
         let html = '';
         steps.forEach((step, idx) => {
             const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
@@ -665,7 +660,7 @@
         lucide.createIcons();
     }
 
-    function updateNavigationBar(step, distanceToTarget) { /* ... (생략) ... */
+    function updateNavigationBar(step, distanceToTarget) { 
         navInstruction.textContent = step.detailed_instruction;
         const remainingTimeSeconds = distanceToTarget / SIMULATION_SPEED_MPS;
         const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds/60)); 
@@ -682,7 +677,7 @@
         lucide.createIcons();
     }
 
-    function handleArrival() { /* ... (생략) ... */
+    function handleArrival() { 
         stopNavigation();
         navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
         document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
@@ -717,7 +712,7 @@
         lucide.createIcons();
     }
     
-    function loadRouteFromUrl() { /* ... (생략) ... */
+    function loadRouteFromUrl() { 
         const params = new URLSearchParams(window.location.search);
         const startId = params.get('start');
         
@@ -734,7 +729,7 @@
         }
     }
 
-    function populateAreaSelects() { /* ... (생략) ... */
+    function populateAreaSelects() { 
         AREA_IDS.forEach(id => {
             const name = AREA_NAMES[id];
             startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
