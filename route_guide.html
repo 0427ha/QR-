@@ -104,24 +104,24 @@
     // 경로 연결 정보 (거리 단축: 약 1/10)
     const ALL_CONNECTIONS = [
         // u, v, distance(m), time(min), turn, instruction (경로 가이드)
-        { u:'A', v:'B', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 면세품 수령 데스크 방향으로 직진" }, // 160 -> 15
-        { u:'B', v:'C', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 환전소/여행자 보험 방향으로 직진" }, // 160 -> 15
-        { u:'D', v:'E', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 출국 심사대 입구 방향으로 직진" }, // 160 -> 15
-        { u:'E', v:'F', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 푸드코트 방향으로 직진" }, // 160 -> 15
-        { u:'G', v:'H', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 면세점 중앙 구역 방향으로 직진" }, // 160 -> 15
-        { u:'H', v:'I', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 탑승 게이트 방향으로 직진" }, // 160 -> 15
+        { u:'A', v:'B', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 면세품 수령 데스크 방향으로 직진" },
+        { u:'B', v:'C', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 환전소/여행자 보험 방향으로 직진" },
+        { u:'D', v:'E', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 출국 심사대 입구 방향으로 직진" },
+        { u:'E', v:'F', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 푸드코트 방향으로 직진" },
+        { u:'G', v:'H', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 면세점 중앙 구역 방향으로 직진" },
+        { u:'H', v:'I', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 탑승 게이트 방향으로 직진" },
 
-        { u:'A', v:'D', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 국내선 체크인 카운터 방향으로 이동" }, // 170 -> 17
-        { u:'B', v:'E', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 출국 심사대 입구 방향으로 이동" }, // 170 -> 17
-        { u:'C', v:'F', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 푸드코트 방향으로 이동" }, // 170 -> 17
-        { u:'D', v:'G', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 라운지 입구 방향으로 이동" }, // 170 -> 17
-        { u:'E', v:'H', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 면세점 중앙 구역 방향으로 이동" }, // 170 -> 17
-        { u:'F', v:'I', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 탑승 게이트 방향으로 이동" }, // 170 -> 17
+        { u:'A', v:'D', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 국내선 체크인 카운터 방향으로 이동" },
+        { u:'B', v:'E', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 출국 심사대 입구 방향으로 이동" },
+        { u:'C', v:'F', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 푸드코트 방향으로 이동" },
+        { u:'D', v:'G', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 라운지 입구 방향으로 이동" },
+        { u:'E', v:'H', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 면세점 중앙 구역 방향으로 이동" },
+        { u:'F', v:'I', distance:17, time:0.3, turn:"직진", instruction:"에스컬레이터를 타고 위층 탑승 게이트 방향으로 이동" },
 
-        { u:'A', v:'E', distance:21, time:0.4, turn:"우회전", instruction:"대각선으로 이동 후 출국 심사대 입구 방향으로 이동" }, // 210 -> 21
-        { u:'B', v:'D', distance:21, time:0.4, turn:"좌회전", instruction:"대각선으로 이동 후 국내선 체크인 카운터 방향으로 이동" }, // 210 -> 21
-        { u:'B', v:'F', distance:21, time:0.4, turn:"우회전", instruction:"대각선으로 이동 후 푸드코트 방향으로 이동" }, // 210 -> 21
-        { u:'E', v:'C', distance:21, time:0.4, turn:"좌회전", instruction:"대각선으로 이동 후 환전소 방향으로 이동" } // 210 -> 21
+        { u:'A', v:'E', distance:21, time:0.4, turn:"우회전", instruction:"대각선으로 이동 후 출국 심사대 입구 방향으로 이동" },
+        { u:'B', v:'D', distance:21, time:0.4, turn:"좌회전", instruction:"대각선으로 이동 후 국내선 체크인 카운터 방향으로 이동" },
+        { u:'B', v:'F', distance:21, time:0.4, turn:"우회전", instruction:"대각선으로 이동 후 푸드코트 방향으로 이동" },
+        { u:'E', v:'C', distance:21, time:0.4, turn:"좌회전", instruction:"대각선으로 이동 후 환전소 방향으로 이동" }
     ];
 
     // 자동으로 역방향 추가 (중복 방지 로직 포함)
@@ -143,7 +143,9 @@
     let isNavigating = false;
     let gpsWatchId = null;
     let userGpsPosition = null;
-    let userGpsHeading = 0;
+    let userGpsHeading = 0; // GPS 이동 방향 대신 장치 방향으로 사용될 예정
+    let deviceOrientationAlpha = 0; // **추가: 장치 방향(Alpha) 값**
+
     const DISTANCE_THRESHOLD = 50; // 근접 기준 (미터)
     const AVERAGE_SPEED_MPS = 4000/3600; // 4 km/h
 
@@ -206,8 +208,34 @@
     }
 
     // -------------------------
-    // GPS 및 내비게이션 로직
+    // GPS, 장치 방향 및 내비게이션 로직
     // -------------------------
+    
+    // **휴대폰 방향에 따른 부채꼴 회전을 위한 장치 방향 이벤트 핸들러**
+    
+    /** 장치 방향(Device Orientation) 변경 시 호출되는 핸들러 */
+    function handleDeviceOrientation(event) {
+        let alpha = event.alpha;
+        
+        if (alpha !== null) {
+            deviceOrientationAlpha = alpha;
+            
+            // 내비게이션 중이라면 사용자 진행 방향(Heading)을 업데이트
+            if (isNavigating) {
+                // 부채꼴을 휴대폰이 향하는 방향(방위각)으로 설정합니다.
+                userGpsHeading = deviceOrientationAlpha; 
+                drawMap(); // 부채꼴을 즉시 다시 그립니다.
+            }
+        }
+    }
+
+    // 이벤트 리스너를 추가합니다.
+    if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+    } else {
+        console.warn("DeviceOrientationEvent가 지원되지 않습니다. 부채꼴 회전이 작동하지 않을 수 있습니다.");
+    }
+
 
     /** GPS 위치 추적 시작 */
     function startGpsTracking() {
@@ -224,9 +252,10 @@
 
     /** GPS 위치 성공 시 콜백 */
     function handleGpsSuccess(position) {
-        const { latitude, longitude, accuracy, heading } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         userGpsPosition = { lat: latitude, lon: longitude, accuracy: accuracy };
-        if (heading !== null && !isNaN(heading)) userGpsHeading = heading;
+        // GPS 이동 방향(heading) 값은 deviceorientation 이벤트가 덮어쓰므로 사용하지 않습니다.
+
         updateGpsStatus("ok", `현재 GPS 위치 수신됨. 정확도: ${Math.round(accuracy)}m`);
         if (isNavigating && lastRouteData && lastRouteData.steps && currentStepIndex < lastRouteData.steps.length) updateGpsPosition(userGpsPosition);
         drawMap();
@@ -610,7 +639,8 @@
         recalculateMapBounds();
         drawMap();
         navBar.classList.remove('active');
-        outputDiv.innerHTML = `<p class="text-gray-500">지도를 시각화하려면 출발지/도착지를 설정하고 버튼을 눌러주세요.</p>`;
+        // QR 코드로 진입했을 때의 상태로 복원하기 위해 loadRouteFromUrl()을 호출
+        loadRouteFromUrl(); 
         stepsListDiv.classList.add('hidden');
         navControlButton.innerText = 'GPS 내비 시작'; navControlButton.disabled = true;
         navControlButton.classList.remove('bg-yellow-500','bg-blue-600'); navControlButton.classList.add('bg-green-500');
@@ -620,7 +650,7 @@
     }
     
     // ----------------------------------------------------
-    // ✨ QR 코드 인식 기능 (URL 파라미터 로드) - 추가된 부분
+    // ✨ QR 코드 인식 기능 (URL 파라미터 로드)
     // ----------------------------------------------------
 
     /** URL 쿼리 파라미터에서 출발지 값을 읽어와 적용하는 함수 */
