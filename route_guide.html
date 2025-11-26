@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (가상 이동)</title>
+    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (가상 이동1)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -122,7 +122,7 @@
     const METERS_PER_DEGREE_LAT = 110574; // 위도 1도당 미터
     const METERS_PER_DEGREE_LON = 88760; // 경도 1도당 미터 (37도 기준)
 
-    // DOM 요소 캐싱 (이전과 동일)
+    // DOM 요소 캐싱
     const startSelect = document.getElementById('start-area');
     const endSelect = document.getElementById('end-area');
     const outputDiv = document.getElementById('route-guidance-output');
@@ -135,7 +135,7 @@
     const ctx = canvas.getContext('2d');
     const navInstruction = document.getElementById('nav-next-instruction');
 
-    // 맵 경계 (이전과 동일)
+    // 맵 경계
     const mapBounds = { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity };
     function recalculateMapBounds() {
         mapBounds.minLat = Infinity; mapBounds.maxLat = -Infinity; mapBounds.minLon = Infinity; mapBounds.maxLon = -Infinity;
@@ -148,7 +148,7 @@
     recalculateMapBounds();
 
     // -------------------------
-    // 유틸리티 함수 (이전과 동일)
+    // 유틸리티 함수
     // -------------------------
     function calculateDistance(lat1, lon1, lat2, lon2) { /* Haversine 공식 */
         const R = 6371e3; const φ1 = lat1 * Math.PI/180; const φ2 = lat2 * Math.PI/180;
@@ -190,8 +190,6 @@
         console.warn("DeviceOrientationEvent가 지원되지 않습니다.");
     }
 
-    // **GPS 추적 제거. 대신 가상 이동 시뮬레이션 구현**
-
     /** 가상 이동 시뮬레이션 시작 */
     function startMovementSimulation() {
         if (movementTimer) clearInterval(movementTimer);
@@ -214,14 +212,15 @@
         const distanceMeters = SIMULATION_SPEED_MPS * (SIMULATION_INTERVAL_MS / 1000);
         
         // 2. 현재 방향(Heading)을 라디안으로 변환 (북쪽 0도, 시계 방향)
-        // 지리적 좌표계와 캔버스 좌표계 보정 (북쪽 0도)
+        // Note: 웹의 DeviceOrientation Alpha는 북쪽 기준 시계방향 0~360도입니다.
         const heading = userGpsHeading;
         const headingRad = heading * Math.PI / 180;
         
         // 3. 위도/경도 변화량 계산
         // 위도 변화 (Cos: 북/남 방향)
+        // 웹 DeviceOrientation의 Alpha (0=N, 90=E, 180=S, 270=W)는 수학적 좌표계(0=E, 90=N)와 다릅니다.
+        // COS(0) = 1 (북쪽), SIN(0) = 0 (동쪽)
         const dLat = (distanceMeters * Math.cos(headingRad)) / METERS_PER_DEGREE_LAT;
-        // 경도 변화 (Sin: 동/서 방향) - 맵의 Y축이 반전되므로 Sin 값도 반전해서 동쪽으로 이동해야 함.
         const dLon = (distanceMeters * Math.sin(headingRad)) / METERS_PER_DEGREE_LON;
         
         // 4. 새 위치 업데이트
@@ -276,9 +275,6 @@
         stopMovementSimulation();
     }
     
-    // ... (이하 나머지 함수들은 이전 코드와 동일하게 유지됩니다.)
-    // ------------------------------------
-
     function toggleNavigation() {
         if (!lastRouteData) return;
         if (navControlButton.innerText === '경로 재설정') { resetApp(); return; }
@@ -286,11 +282,58 @@
     }
     
     // -------------------------
-    // 경로 검색 및 UI 렌더링 (findOptimalRoute, createRouteGuidance는 동일)
+    // 경로 검색 및 UI 렌더링
     // -------------------------
 
-    function findOptimalRoute(startNode, endNode) { /* ... */ }
-    function createRouteGuidance(optimalPath, totalTime) { /* ... */ }
+    /** Dijkstra 알고리즘으로 최적 경로 검색 (시간 기준) */
+    function findOptimalRoute(startNode, endNode) {
+        const distances = {}; const previousNodes = {}; const pq = new Set();
+        AREA_IDS.forEach(id => { distances[id] = Infinity; previousNodes[id] = null; });
+        distances[startNode] = 0; pq.add(startNode);
+
+        const getMin = () => { let min=Infinity, node=null; pq.forEach(n=>{ if(distances[n]<min){min=distances[n]; node=n;} }); return node; };
+
+        while (pq.size>0) {
+            const node = getMin();
+            if (!node) break;
+            pq.delete(node);
+            if (node === endNode) break;
+            const neighbors = ALL_CONNECTIONS.filter(c=>c.u===node);
+            for (const nb of neighbors) {
+                const next = nb.v; const newT = distances[node] + nb.time;
+                if (newT < distances[next]) { distances[next] = newT; previousNodes[next] = node; pq.add(next); }
+            }
+        }
+        
+        let path = []; let cur = endNode;
+        while (cur) {
+            path.unshift(cur);
+            cur = previousNodes[cur];
+            if (cur === startNode) { path.unshift(startNode); break; }
+            if (!cur) break;
+        }
+
+        if (path.length===0 || path[0]!==startNode || path[path.length-1]!==endNode) return { total_time_min: Infinity, optimal_path_areas: [] };
+        return { total_time_min: distances[endNode], optimal_path_areas: path };
+    }
+    
+    /** 경로 상세 지침 생성 */
+    function createRouteGuidance(optimalPath, totalTime) {
+        if (!optimalPath || optimalPath.length < 2) return { steps: [], total_distance_m: 0, total_time_min: 0 };
+        const steps = []; let totalDistance = 0;
+        for (let i=0;i<optimalPath.length-1;i++) {
+            const from = optimalPath[i], to = optimalPath[i+1];
+            const conn = ALL_CONNECTIONS.find(c=>c.u===from && c.v===to);
+            if (!conn) continue;
+            totalDistance += conn.distance;
+            const isLast = (i===optimalPath.length-2);
+            const turnType = isLast ? "도착" : conn.turn;
+            const timeDisplay = (conn.time).toFixed(1); 
+            const instruction = isLast ? `최종 목적지인 ${AREA_NAMES[to]}에 도착했습니다. 경로 안내를 종료합니다.` : `${conn.instruction} 후 ${AREA_NAMES[to]} 방향으로 이동합니다.`;
+            steps.push({ step_id: i+1, from_area: from, to_area: to, distance_m: conn.distance, travel_time_min: conn.time, travel_time_display: timeDisplay, turn_type: turnType, detailed_instruction: instruction });
+        }
+        return { steps, total_distance_m: totalDistance, total_time_min: totalTime };
+    }
 
     /** 경로 검색 시작 및 내비게이션 준비 */
     function startRouteGuidance() {
@@ -302,25 +345,27 @@
         // **시작 시 가상 위치를 출발지 좌표로 설정**
         userGpsPosition = { lat: AREA_COORDINATES[startId].lat, lon: AREA_COORDINATES[startId].lon, accuracy: 10 };
 
-
-        // **추가된 권한 요청 로직 (iOS 13+ 대응) - 이제 GPS가 아닌 센서 권한 요청**
+        // --- iOS 13+ 권한 요청 로직 (오류 처리 강화) ---
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission()
                 .then(permissionState => {
                     if (permissionState === 'granted') {
+                        // 권한이 부여되면 경로 검색 및 내비게이션 진행
                         performRouteSearchAndStartNav(startId, endId);
                     } else {
-                        alert("휴대폰 방향 정보를 사용하려면 센서 접근 권한을 허용해야 합니다.");
+                        alert("휴대폰 방향 정보를 사용하려면 센서 접근 권한을 허용해야 합니다. 설정에서 권한을 확인해 주세요.");
                         searchButton.disabled = false; searchButton.innerText = '경로 검색 및 내비게이션 준비'; navBar.classList.remove('active');
                     }
                 })
                 .catch(error => {
-                    console.error("권한 요청 중 오류 발생:", error);
-                    alert("센서 권한 요청 중 오류가 발생했습니다. 브라우저 설정을 확인해주세요.");
+                    // 권한 요청 API가 존재하지만 실행 중 오류가 발생한 경우 (민감한 부분)
+                    console.error("권한 요청 중 오류 발생 (예외 처리):", error.name, error.message);
+                    alert("센서 권한 요청 실패. Safari 설정을 확인하거나 페이지를 새로고침하여 재시도해주세요.");
                     searchButton.disabled = false; searchButton.innerText = '경로 검색 및 내비게이션 준비'; navBar.classList.remove('active');
                 });
         } else {
-            // 권한 요청 API를 지원하지 않는 브라우저는 바로 진행
+            // 권한 요청 API를 지원하지 않는 브라우저 (구형 iOS 또는 Android 등)는 바로 진행
+            console.log("DeviceOrientationEvent.requestPermission API를 지원하지 않으므로 바로 내비게이션 시작.");
             performRouteSearchAndStartNav(startId, endId);
         }
     }
@@ -352,10 +397,10 @@
 
 
     // -------------------------
-    // 맵 드로잉 및 UI 업데이트 (대부분 동일)
+    // 맵 드로잉 및 UI 업데이트
     // -------------------------
 
-    function drawMap() { /* ... (이전 코드와 동일) */
+    function drawMap() { 
         resizeCanvas();
         ctx.clearRect(0,0,canvas.width,canvas.height);
         const data = lastRouteData || {};
@@ -439,18 +484,18 @@
         });
     }
 
-    function resizeCanvas() { /* ... (이전 코드와 동일) */
+    function resizeCanvas() { 
         const containerWidth = canvas.parentElement.clientWidth;
         canvas.width = Math.min(containerWidth, 900);
         canvas.height = canvas.width * (520/900);
         if (canvas.height < 300) canvas.height = 300;
     }
-    function updateGpsStatus(type, message) { /* ... (이전 코드와 동일) */
+    function updateGpsStatus(type, message) { 
         gpsStatusMessage.textContent = `시뮬레이션 상태: ${message}`;
         gpsStatusMessage.classList.remove('gps-status-ok','gps-status-err');
         if (type === 'ok') gpsStatusMessage.classList.add('gps-status-ok'); else gpsStatusMessage.classList.add('gps-status-err');
     }
-    function renderGuidanceSummary(data) { /* ... (이전 코드와 동일) */
+    function renderGuidanceSummary(data) { 
         const pathSummary = data.optimal_path_areas.map(id => AREA_NAMES[id]).join(' → ');
         outputDiv.innerHTML = `
             <div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg">
@@ -471,7 +516,7 @@
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         lucide.createIcons();
     }
-    function highlightStep(index, isArrival = false) { /* ... (이전 코드와 동일) */
+    function highlightStep(index, isArrival = false) { 
         document.querySelectorAll('#steps-list > div').forEach((el, i) => {
             el.classList.remove('border-blue-600', 'bg-blue-50', 'shadow-lg');
             el.classList.add('border-gray-200', 'bg-white');
@@ -480,7 +525,7 @@
             }
         });
     }
-    function renderStepsList(steps) { /* ... (이전 코드와 동일) */
+    function renderStepsList(steps) { 
         let html = '';
         steps.forEach((step, idx) => {
             const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
@@ -500,13 +545,11 @@
         lucide.createIcons();
     }
 
-    function updateNavigationBar(step, distanceToTarget) { /* ... (이전 코드와 동일, GPS 대신 시뮬레이션 속도 사용) */
+    function updateNavigationBar(step, distanceToTarget) { 
         navInstruction.textContent = step.detailed_instruction;
-        // 시뮬레이션 속도 SIMULATION_SPEED_MPS를 사용하여 시간 계산
         const remainingTimeSeconds = distanceToTarget / SIMULATION_SPEED_MPS;
         const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds/60)); 
         
-        // 가상 이동이므로 정확도 정보는 고정
         const accuracy = userGpsPosition && userGpsPosition.accuracy ? Math.round(userGpsPosition.accuracy) : '10';
         
         if (step.turn_type === '도착') {
@@ -519,7 +562,7 @@
         lucide.createIcons();
     }
 
-    function handleArrival() { /* ... (이전 코드와 동일) */
+    function handleArrival() { 
         stopNavigation();
         navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
         document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
@@ -532,7 +575,7 @@
         lucide.createIcons();
     }
     
-    function resetApp() { /* ... (이전 코드와 동일, 시뮬레이션 중지) */
+    function resetApp() { 
         stopMovementSimulation();
         lastRouteData = null; isNavigating = false; currentStepIndex = 0; userGpsPosition = null; userGpsHeading = 0;
         recalculateMapBounds();
@@ -547,7 +590,7 @@
         lucide.createIcons();
     }
     
-    function loadRouteFromUrl() { /* ... (이전 코드와 동일) */
+    function loadRouteFromUrl() { 
         const params = new URLSearchParams(window.location.search);
         const startId = params.get('start');
         
@@ -564,7 +607,7 @@
         }
     }
 
-    function populateAreaSelects() { /* ... (이전 코드와 동일) */
+    function populateAreaSelects() { 
         AREA_IDS.forEach(id => {
             const name = AREA_NAMES[id];
             startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
