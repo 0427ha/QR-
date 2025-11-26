@@ -144,7 +144,7 @@
     let gpsWatchId = null;
     let userGpsPosition = null;
     let userGpsHeading = 0; // GPS 이동 방향 대신 장치 방향으로 사용될 예정
-    let deviceOrientationAlpha = 0; // **추가: 장치 방향(Alpha) 값**
+    let deviceOrientationAlpha = 0; // 장치 방향(Alpha) 값
 
     const DISTANCE_THRESHOLD = 50; // 근접 기준 (미터)
     const AVERAGE_SPEED_MPS = 4000/3600; // 4 km/h
@@ -406,6 +406,36 @@
         if (startId === endId) { outputDiv.innerHTML = `<div class="p-4 bg-yellow-100 rounded-lg text-yellow-700">출발지와 도착지가 동일합니다.</div>`; navBar.classList.remove('active'); return; }
         searchButton.disabled = true; searchButton.innerText = '경로 계산 중...';
 
+        // **추가된 권한 요청 로직 (iOS 13+ 대응)**
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission()
+                .then(permissionState => {
+                    if (permissionState === 'granted') {
+                        // 권한이 부여되면 경로 검색 및 내비게이션 진행
+                        performRouteSearchAndStartNav(startId, endId);
+                    } else {
+                        alert("휴대폰 방향 정보를 사용하려면 센서 접근 권한을 허용해야 합니다.");
+                        // 권한 거부 시 버튼 상태 복구
+                        searchButton.disabled = false;
+                        searchButton.innerText = '경로 검색 및 내비게이션 준비';
+                        navBar.classList.remove('active');
+                    }
+                })
+                .catch(error => {
+                    console.error("권한 요청 중 오류 발생:", error);
+                    alert("센서 권한 요청 중 오류가 발생했습니다. 브라우저 설정을 확인해주세요.");
+                    searchButton.disabled = false;
+                    searchButton.innerText = '경로 검색 및 내비게이션 준비';
+                    navBar.classList.remove('active');
+                });
+        } else {
+            // 권한 요청 API를 지원하지 않는 브라우저 (대부분 Android나 구형 iOS)는 바로 진행
+            performRouteSearchAndStartNav(startId, endId);
+        }
+    }
+
+    /** 실제 경로 검색 및 내비게이션 시작 로직 */
+    function performRouteSearchAndStartNav(startId, endId) {
         const { total_time_min, optimal_path_areas } = findOptimalRoute(startId, endId);
 
         if (total_time_min === Infinity) { 
@@ -414,7 +444,6 @@
         }
         
         const { steps, total_distance_m } = createRouteGuidance(optimal_path_areas, total_time_min);
-        // 총 시간은 올림 처리하여 표시
         const totalTimeDisplay = Math.ceil(total_time_min); 
         lastRouteData = { start_area_id: startId, end_area_id: endId, optimal_path_areas: optimal_path_areas, total_time_min: totalTimeDisplay, total_distance_m: total_distance_m, steps: steps };
         currentStepIndex = 0;
@@ -466,12 +495,10 @@
         if (isNavigating && userGpsPosition) {
             const user = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
             const accuracyRadius = 25; // 위치 정확도 원의 기준 반지름 (시야각 크기 결정에 사용)
-            const userRadius = 10;      // **사용자 마커 반지름 (10px로 확대)**
+            const userRadius = 10;      // 사용자 마커 반지름 (10px로 확대)
             const fieldOfViewAngle = 60; // 시야각 60도
 
-            // 1. 위치 정확도 원 (연한 노란색) -> **제거됨**
-
-            // 2. 진행 방향 시야각 (부채꼴) - 파란색 계열, 크기는 적당히 유지
+            // 1. 진행 방향 시야각 (부채꼴) - 파란색 계열
             const headingRad = userGpsHeading * Math.PI / 180;
             const startAngle = headingRad - (fieldOfViewAngle * Math.PI / 180 / 2);
             const endAngle = headingRad + (fieldOfViewAngle * Math.PI / 180 / 2);
@@ -485,7 +512,7 @@
             ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; // 파란색으로 수정
             ctx.fill();
 
-            // 3. 사용자 위치 원 (노란색, 확대된 크기)
+            // 2. 사용자 위치 원 (노란색, 확대된 크기)
             ctx.beginPath();
             // 사용자 마커 반지름을 10px로 키웠습니다.
             ctx.arc(user.x, user.y, userRadius, 0, Math.PI * 2); 
