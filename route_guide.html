@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (가상 이동, 줌/팬)</title>
+    <title>✈️ 공항 GPS 내비게이션 시뮬레이션 (수동 시작, 줌/팬)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -24,7 +24,7 @@
 </head>
 <body class="p-4 sm:p-8">
     <div class="container mx-auto pb-40">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션 (가상 이동, 줌/팬)</h1>
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 터미널 GPS 내비게이션 (수동 시작, 줌/팬)</h1>
 
         <div class="card p-6 rounded-xl mb-6">
             <div id="gps-status-message" class="p-3 mb-4 rounded-lg text-sm font-medium gps-status-err">
@@ -66,12 +66,12 @@
                 <p id="nav-step-info" class="text-sm text-blue-200 mt-0.5">총 거리: 0m | 총 시간: 0분</p>
             </div>
         </div>
-        <button id="nav-control-button" onclick="toggleNavigation()" class="px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600 transition duration-150 flex-shrink-0" disabled>GPS 내비 시작</button>
+        <button id="nav-control-button" onclick="toggleNavigation()" class="px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600 transition duration-150 flex-shrink-0" disabled>가상 내비 시작</button>
     </div>
 
     <script>
     // -------------------------
-    // 데이터 및 초기 설정 (좌표, 연결 등은 이전과 동일)
+    // 데이터 및 초기 설정
     // -------------------------
     const AREA_NAMES = {
         'A': 'A. 국제선 도착 게이트 (1층)', 'B': 'B. 면세품 수령 데스크 (1층)', 'C': 'C. 환전소/여행자 보험 (1층)',
@@ -86,7 +86,7 @@
         'G': { lat: 37.507000, lon: 127.050000 }, 'H': { lat: 37.507000, lon: 127.051800 }, 'I': { lat: 37.507000, lon: 127.053600 }
     };
     
-    // 경로 연결 정보 (생략)
+    // 경로 연결 정보 (이전과 동일)
     const ALL_CONNECTIONS = [
         { u:'A', v:'B', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 면세품 수령 데스크 방향으로 직진" }, { u:'B', v:'C', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 환전소/여행자 보험 방향으로 직진" },
         { u:'D', v:'E', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 출국 심사대 입구 방향으로 직진" }, { u:'E', v:'F', distance:15, time:0.2, turn:"직진", instruction:"오른쪽 푸드코트 방향으로 직진" },
@@ -126,7 +126,7 @@
     let lastMouseX, lastMouseY;  // 마지막 마우스/터치 위치
     let initialTouches = [];     // 핀치 줌을 위한 초기 두 손가락 좌표
 
-    // 줌 레벨 제한 상수 🌟 0.6으로 변경 🌟
+    // 줌 레벨 제한 상수 (사용자 요청: 최소 0.6)
     const MIN_MAP_SCALE = 0.6; 
     const MAX_MAP_SCALE = 5.0; 
 
@@ -164,7 +164,7 @@
     recalculateMapBounds();
 
     // -------------------------
-    // 유틸리티 함수
+    // 유틸리티 함수 및 맵 상호작용
     // -------------------------
     function calculateDistance(lat1, lon1, lat2, lon2) { /* Haversine 공식 */
         const R = 6371e3; const φ1 = lat1 * Math.PI/180; const φ2 = lat2 * Math.PI/180;
@@ -202,26 +202,20 @@
         return { x, y };
     }
 
-    // -------------------------
-    // 맵 상호작용 이벤트 핸들러
-    // -------------------------
-
     function setupMapInteractions() {
-        // 마우스 (PC용 팬/드래그 및 휠 줌)
         canvas.addEventListener('mousedown', handleMouseDown);
         canvas.addEventListener('mouseup', handleMouseUp);
         canvas.addEventListener('mouseleave', handleMouseUp);
         canvas.addEventListener('mousemove', handleMouseMove);
         canvas.addEventListener('wheel', handleWheel, { passive: false }); 
         
-        // 터치 이벤트 (모바일용 핀치 줌 및 팬)
         canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
         canvas.addEventListener('touchend', handleTouchEnd);
         canvas.addEventListener('touchcancel', handleTouchEnd);
         canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     }
 
-    // 마우스 이벤트 핸들러
+    // 마우스 이벤트 핸들러 (이전과 동일)
     function handleMouseDown(e) { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; }
     function handleMouseUp(e) { isDragging = false; }
     function handleMouseMove(e) {
@@ -237,26 +231,25 @@
         
         drawMap();
     }
-    /** 휠 이벤트 핸들러 🌟 최소 스케일 0.6 적용 🌟 */
+    // 휠 이벤트 핸들러 (최소 스케일 0.6 적용)
     function handleWheel(e) {
         e.preventDefault(); 
         const scaleFactor = 1.1; 
         
         if (e.deltaY < 0) { mapScale *= scaleFactor; } else { mapScale /= scaleFactor; }
         
-        // 최소 스케일을 0.6으로 제한
         mapScale = Math.max(MIN_MAP_SCALE, Math.min(MAX_MAP_SCALE, mapScale));
         drawMap();
     }
 
-    // 터치 이벤트 핸들러
+    // 터치 이벤트 핸들러 (최소 스케일 0.6 적용)
     function getDistance(t1, t2) { return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY); }
 
     function handleTouchStart(e) {
         e.preventDefault(); 
         initialTouches = Array.from(e.touches);
         
-        if (initialTouches.length === 1) { // 한 손가락 드래그 (팬)
+        if (initialTouches.length === 1) { 
             isDragging = true;
             lastMouseX = initialTouches[0].clientX;
             lastMouseY = initialTouches[0].clientY;
@@ -265,11 +258,9 @@
 
     function handleTouchEnd(e) {
         isDragging = false;
-        // 터치 끝난 후 남아있는 터치만 남김
         initialTouches = Array.from(e.touches); 
     }
 
-    /** 터치 이동 핸들러 🌟 최소 스케일 0.6 적용 🌟 */
     function handleTouchMove(e) {
         e.preventDefault();
 
@@ -295,7 +286,6 @@
             const scaleChange = currentDistance / initialDistance;
             mapScale *= scaleChange;
             
-            // 최소 스케일을 0.6으로 제한
             mapScale = Math.max(MIN_MAP_SCALE, Math.min(MAX_MAP_SCALE, mapScale));
             
             initialTouches = currentTouches; 
@@ -306,7 +296,7 @@
 
 
     // -------------------------
-    // 장치 방향 및 가상 이동 로직 (이전과 동일)
+    // 장치 방향 및 수동 시뮬레이션 이동 로직
     // -------------------------
     
     /** 장치 방향(Device Orientation) 변경 시 호출되는 핸들러 */
@@ -315,6 +305,7 @@
         if (alpha !== null) {
             deviceOrientationAlpha = alpha;
             if (isNavigating) {
+                // 내비게이션 중일 때만 디바이스 방향을 진행 방향으로 사용
                 userGpsHeading = deviceOrientationAlpha; 
                 drawMap(); 
             }
@@ -328,9 +319,10 @@
         console.warn("DeviceOrientationEvent가 지원되지 않습니다.");
     }
 
-    /** 가상 이동 시뮬레이션 시작 */
+    /** 가상 이동 시뮬레이션 시작 (setInterval) */
     function startMovementSimulation() {
         if (movementTimer) clearInterval(movementTimer);
+        // 이 타이머가 0.2초마다 userGpsPosition을 업데이트합니다.
         movementTimer = setInterval(updateVirtualPosition, SIMULATION_INTERVAL_MS);
         updateGpsStatus("ok", "가상 이동 시뮬레이션 시작됨.");
     }
@@ -338,7 +330,7 @@
     /** 가상 이동 시뮬레이션 중지 */
     function stopMovementSimulation() {
         if (movementTimer) { clearInterval(movementTimer); movementTimer = null; }
-        updateGpsStatus("error", "가상 이동 시뮬레이션 중지됨.");
+        updateGpsStatus("error", "가상 이동 시뮬레이션 중지됨. '가상 내비 시작'을 눌러 재개하세요.");
     }
 
     /** 가상 위치 업데이트 로직 */
@@ -359,13 +351,11 @@
         drawMap();
     }
 
-    /** 내비게이션 상태 업데이트 */
+    /** 내비게이션 상태 업데이트 (이전과 동일) */
     function updateNavigationState(currentVirtualPos) {
         if (!lastRouteData || !lastRouteData.steps || currentStepIndex >= lastRouteData.steps.length) return;
         const currentStep = lastRouteData.steps[currentStepIndex];
-        const targetAreaId = currentStep.to_area;
-        const targetGps = AREA_COORDINATES[targetAreaId];
-        if (!targetGps) return;
+        const targetGps = AREA_COORDINATES[currentStep.to_area];
 
         const distanceToTarget = calculateDistance(currentVirtualPos.lat, currentVirtualPos.lon, targetGps.lat, targetGps.lon);
 
@@ -388,7 +378,8 @@
         navControlButton.innerText = '가상 내비 중지'; 
         navControlButton.classList.remove('bg-green-500'); navControlButton.classList.add('bg-yellow-500');
         
-        startMovementSimulation();
+        // 버튼을 눌렀을 때만 이동 시뮬레이션 시작!
+        startMovementSimulation(); 
 
         if (lastRouteData && currentStepIndex < lastRouteData.steps.length) {
             updateNavigationBar(lastRouteData.steps[currentStepIndex], 0); highlightStep(currentStepIndex);
@@ -466,9 +457,11 @@
         if (startId === endId) { outputDiv.innerHTML = `<div class="p-4 bg-yellow-100 rounded-lg text-yellow-700">출발지와 도착지가 동일합니다.</div>`; navBar.classList.remove('active'); return; }
         searchButton.disabled = true; searchButton.innerText = '경로 계산 중...';
 
+        // 사용자 가상 위치를 출발 지점에 고정
         userGpsPosition = { lat: AREA_COORDINATES[startId].lat, lon: AREA_COORDINATES[startId].lon, accuracy: 10 };
+        userGpsHeading = 0; // 초기 방향 고정 (북쪽)
 
-        // --- iOS 13+ 권한 요청 로직 (강화된 오류 처리) ---
+        // --- iOS 13+ 권한 요청 로직 (이전과 동일) ---
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission()
                 .then(permissionState => {
@@ -485,12 +478,12 @@
                     searchButton.disabled = false; searchButton.innerText = '경로 검색 및 내비게이션 준비'; navBar.classList.remove('active');
                 });
         } else {
-            console.log("DeviceOrientationEvent.requestPermission API를 지원하지 않으므로 바로 내비게이션 시작.");
+            console.log("DeviceOrientationEvent.requestPermission API를 지원하지 않으므로 바로 내비게이션 준비.");
             performRouteSearchAndStartNav(startId, endId);
         }
     }
 
-    /** 실제 경로 검색 및 내비게이션 시작 로직 */
+    /** 실제 경로 검색 및 내비게이션 준비 로직 🌟 수정된 부분 🌟 */
     function performRouteSearchAndStartNav(startId, endId) {
         const { total_time_min, optimal_path_areas } = findOptimalRoute(startId, endId);
 
@@ -508,16 +501,21 @@
         renderStepsList(lastRouteData.steps);
         drawMap();
         
+        // 내비게이션 준비 상태 (버튼은 '시작' 상태로 대기)
         navBar.classList.add('active');
-        navControlButton.innerText = '가상 내비 중지'; navControlButton.disabled = false; navControlButton.classList.remove('bg-green-500','bg-blue-600','bg-yellow-500'); navControlButton.classList.add('bg-yellow-500');
+        navControlButton.innerText = '가상 내비 시작'; 
+        navControlButton.disabled = false; 
+        navControlButton.classList.remove('bg-yellow-500','bg-blue-600'); 
+        navControlButton.classList.add('bg-green-500');
         searchButton.disabled=false; searchButton.innerText='경로 검색 및 내비게이션 준비';
         
-        startNavigation(); // 자동 시작
+        // 자동 시작을 제거했습니다.
+        updateGpsStatus("ok","경로 준비 완료. '가상 내비 시작' 버튼을 눌러 이동을 시작하세요.");
     }
 
 
     // -------------------------
-    // 맵 드로잉 및 UI 업데이트
+    // 맵 드로잉 및 UI 업데이트 (이전과 동일)
     // -------------------------
 
     function drawMap() { 
@@ -536,7 +534,7 @@
 
         // 최적 경로
         if (optimalPath.length > 1) {
-            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 5 * mapScale; ctx.lineCap = 'round'; // 줌에 따라 두께 조정
+            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 5 * mapScale; ctx.lineCap = 'round';
             ctx.beginPath();
             let first = true;
             for (const id of optimalPath) {
@@ -547,23 +545,25 @@
         }
 
         // 사용자 위치 (노란색 원, 시야각 부채꼴)
-        if (isNavigating && userGpsPosition) {
+        if (userGpsPosition) { // 내비게이션 중이 아니더라도 위치는 표시
             const user = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
             const accuracyRadius = 25 * mapScale; 
             const userRadius = 10 * mapScale;
             const fieldOfViewAngle = 60; 
 
-            // 1. 진행 방향 시야각 (부채꼴)
-            const headingRad = userGpsHeading * Math.PI / 180;
-            const startAngle = headingRad - (fieldOfViewAngle * Math.PI / 180 / 2);
-            const endAngle = headingRad + (fieldOfViewAngle * Math.PI / 180 / 2);
+            // 1. 진행 방향 시야각 (부채꼴) - 내비 중일 때만 표시
+            if(isNavigating) {
+                const headingRad = userGpsHeading * Math.PI / 180;
+                const startAngle = headingRad - (fieldOfViewAngle * Math.PI / 180 / 2);
+                const endAngle = headingRad + (fieldOfViewAngle * Math.PI / 180 / 2);
 
-            ctx.beginPath();
-            ctx.moveTo(user.x, user.y);
-            ctx.arc(user.x, user.y, accuracyRadius * 1.5, startAngle, endAngle);
-            ctx.closePath();
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; 
-            ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(user.x, user.y);
+                ctx.arc(user.x, user.y, accuracyRadius * 1.5, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; 
+                ctx.fill();
+            }
 
             // 2. 사용자 위치 원
             ctx.beginPath();
@@ -574,12 +574,12 @@
             ctx.fill();
             ctx.stroke();
 
-            // 목표까지 점선
-            if (lastRouteData && lastRouteData.steps && currentStepIndex < lastRouteData.steps.length) {
+            // 목표까지 점선 (내비 중일 때만 표시)
+            if (isNavigating && lastRouteData && lastRouteData.steps && currentStepIndex < lastRouteData.steps.length) {
                 const targetId = lastRouteData.steps[currentStepIndex].to_area;
                 const t = latLonToCanvas(AREA_COORDINATES[targetId].lat, AREA_COORDINATES[targetId].lon);
                 ctx.strokeStyle = 'rgba(16,185,129,0.5)';
-                ctx.setLineDash([6*mapScale,6*mapScale]); // 줌에 따라 점선 간격 조정
+                ctx.setLineDash([6*mapScale,6*mapScale]); 
                 ctx.lineWidth = 2 * mapScale;
                 ctx.beginPath();
                 ctx.moveTo(user.x, user.y);
@@ -596,11 +596,11 @@
             const isEnd = lastRouteData && id === lastRouteData.end_area_id;
             ctx.beginPath();
             ctx.fillStyle = isStart ? '#3b82f6' : (isEnd ? '#ef4444' : '#9ca3af');
-            ctx.arc(coord.x, coord.y, (isStart||isEnd ? 9 : 6) * mapScale, 0, Math.PI*2); // 줌에 따라 크기 조정
+            ctx.arc(coord.x, coord.y, (isStart||isEnd ? 9 : 6) * mapScale, 0, Math.PI*2); 
             ctx.fill();
             ctx.fillStyle = '#1f2937';
             ctx.font = `${12 * mapScale}px Inter`; ctx.textAlign = 'center';
-            ctx.fillText(id, coord.x, coord.y - 16 * mapScale); // 줌에 따라 라벨 위치 조정
+            ctx.fillText(id, coord.x, coord.y - 16 * mapScale); 
         });
     }
 
@@ -610,12 +610,12 @@
         canvas.height = canvas.width * (520/900);
         if (canvas.height < 300) canvas.height = 300;
     }
-    function updateGpsStatus(type, message) { 
+    function updateGpsStatus(type, message) { /* ... (생략) ... */
         gpsStatusMessage.textContent = `시뮬레이션 상태: ${message}`;
         gpsStatusMessage.classList.remove('gps-status-ok','gps-status-err');
         if (type === 'ok') gpsStatusMessage.classList.add('gps-status-ok'); else gpsStatusMessage.classList.add('gps-status-err');
     }
-    function renderGuidanceSummary(data) { 
+    function renderGuidanceSummary(data) { /* ... (생략) ... */
         const pathSummary = data.optimal_path_areas.map(id => AREA_NAMES[id]).join(' → ');
         outputDiv.innerHTML = `
             <div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg">
@@ -631,12 +631,12 @@
                 <p class="text-sm text-gray-500 mt-1 truncate">경로 요약: ${pathSummary}</p>
             </div>
         `;
-        document.getElementById('nav-next-instruction').textContent = '가상 내비게이션이 시작되었습니다.';
+        document.getElementById('nav-next-instruction').textContent = '내비게이션을 시작해 주세요.';
         document.getElementById('nav-step-info').textContent = `총 거리: ${Math.round(data.total_distance_m)}m | 총 시간: ${data.total_time_min}분`;
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         lucide.createIcons();
     }
-    function highlightStep(index, isArrival = false) { 
+    function highlightStep(index, isArrival = false) { /* ... (생략) ... */
         document.querySelectorAll('#steps-list > div').forEach((el, i) => {
             el.classList.remove('border-blue-600', 'bg-blue-50', 'shadow-lg');
             el.classList.add('border-gray-200', 'bg-white');
@@ -645,7 +645,7 @@
             }
         });
     }
-    function renderStepsList(steps) { 
+    function renderStepsList(steps) { /* ... (생략) ... */
         let html = '';
         steps.forEach((step, idx) => {
             const iconName = TURN_ICONS[step.turn_type] || TURN_ICONS['직진'];
@@ -665,7 +665,7 @@
         lucide.createIcons();
     }
 
-    function updateNavigationBar(step, distanceToTarget) { 
+    function updateNavigationBar(step, distanceToTarget) { /* ... (생략) ... */
         navInstruction.textContent = step.detailed_instruction;
         const remainingTimeSeconds = distanceToTarget / SIMULATION_SPEED_MPS;
         const remainingTimeMinutes = Math.max(1, Math.ceil(remainingTimeSeconds/60)); 
@@ -682,7 +682,7 @@
         lucide.createIcons();
     }
 
-    function handleArrival() { 
+    function handleArrival() { /* ... (생략) ... */
         stopNavigation();
         navInstruction.textContent = `도착! ${AREA_NAMES[lastRouteData.end_area_id]}에 도착하셨습니다.`;
         document.getElementById('nav-step-info').textContent = '경로 안내가 종료되었습니다.';
@@ -710,14 +710,14 @@
         navBar.classList.remove('active');
         loadRouteFromUrl(); 
         stepsListDiv.classList.add('hidden');
-        navControlButton.innerText = 'GPS 내비 시작'; navControlButton.disabled = true;
+        navControlButton.innerText = '가상 내비 시작'; navControlButton.disabled = true;
         navControlButton.classList.remove('bg-yellow-500','bg-blue-600'); navControlButton.classList.add('bg-green-500');
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         updateGpsStatus("error","내비게이션이 초기화되었습니다. 경로를 다시 검색해 주세요.");
         lucide.createIcons();
     }
     
-    function loadRouteFromUrl() { 
+    function loadRouteFromUrl() { /* ... (생략) ... */
         const params = new URLSearchParams(window.location.search);
         const startId = params.get('start');
         
@@ -734,7 +734,7 @@
         }
     }
 
-    function populateAreaSelects() { 
+    function populateAreaSelects() { /* ... (생략) ... */
         AREA_IDS.forEach(id => {
             const name = AREA_NAMES[id];
             startSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${id}: ${name}</option>`);
