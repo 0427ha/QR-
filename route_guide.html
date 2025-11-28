@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>✈️ 공항 실내 GPS (리얼 GPS + 모바일 최적화)</title>
+    <title>✈️ 공항 실내 GPS (Heading Up 내비게이션)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -17,23 +17,22 @@
             box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); min-height:300px; 
             touch-action: none; 
         }
-        /* 🚨 모바일 UI 최적화: 하단 바 패딩 및 높이 조정 */
+        /* 모바일 UI 최적화 */
         #navigation-bar { 
             position: fixed; bottom:0; left:0; right:0; z-index: 50; 
             background:#1e3a8a; color:white; 
             box-shadow: 0 -4px 12px rgba(0,0,0,0.2); 
             border-top-left-radius:1rem; border-top-right-radius:1rem; 
             transform: translateY(100%); transition: transform .3s ease-in-out; 
-            padding: 0.75rem 1rem; /* 수직 패딩 감소 */
+            padding: 0.75rem 1rem;
         }
         #navigation-bar.active { transform: translateY(0); }
-        /* 긴 텍스트가 잘리지 않도록 min-width: 0 적용 */
         #navigation-bar .flex-col { min-width: 0; }
     </style>
 </head>
 <body class="p-4 sm:p-8">
     <div class="container mx-auto pb-40">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 실내 GPS (리얼 모드)</h1>
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-4 border-blue-500 pb-2">✈️ 공항 실내 GPS (Heading Up 모드)</h1>
 
         <div class="card p-6 rounded-xl mb-6">
             <div id="gps-status-message" class="p-3 mb-4 rounded-lg text-sm font-medium gps-status-err">
@@ -129,7 +128,7 @@
     let isNavigating = false;
     let gpsWatchId = null;
     let userGpsPosition = null;
-    let userGpsHeading = 0; // 이제 GPS Course 값을 저장합니다. 
+    let userGpsHeading = 0; // GPS Course 값을 저장
     
     // 맵 뷰 상태
     let mapScale = 1.0;
@@ -245,9 +244,8 @@
         navControlButton.className = "px-5 py-2 bg-yellow-500 text-white font-bold rounded-full shadow-lg hover:bg-yellow-600";
         updateGpsStatus("ok", "GPS 추적 시작. 위치 정보 수신 대기 중...");
 
-        // 🌟🌟🌟 수정: DeviceOrientationEvent 리스너 등록 부분을 제거 (GPS Course 사용) 🌟🌟🌟
-        // window.addEventListener('deviceorientation', handleDeviceOrientation); 를 사용하지 않습니다.
-
+        // DeviceOrientationEvent 사용 중지 (GPS Course 사용)
+        
         if (!gpsWatchId) { 
             gpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, {
                 enableHighAccuracy: true, timeout: 5000, maximumAge: 0 
@@ -258,6 +256,13 @@
             (pos) => { 
                 applyGpsOffsetToMap(pos.coords.latitude, pos.coords.longitude); 
                 handleGpsSuccess(pos); 
+                // 🌟🌟🌟 Heading Up 모드: 내비 시작 시 지도 중앙 이동 🌟🌟🌟
+                if (userGpsPosition) {
+                    const center = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
+                    mapTranslateX += canvas.width/2 - center.x;
+                    mapTranslateY += canvas.height/2 - center.y;
+                    drawMap();
+                }
             },
             (err) => { 
                 console.warn("초기 GPS 오프셋 위치 획득 실패. 워처로 계속 시도합니다.", err); 
@@ -275,17 +280,15 @@
         navControlButton.className = "px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600";
         updateGpsStatus("error", "GPS 추적 일시 중지됨. 재개를 누르세요.");
         
-        // 🌟🌟🌟 수정: DeviceOrientationEvent 리스너 제거 부분도 주석 처리합니다. 🌟🌟🌟
-        // window.removeEventListener('deviceorientation', handleDeviceOrientation); 
+        // DeviceOrientationEvent 리스너 제거도 필요 없음
     }
 
     // --- GPS 및 센서 핸들러 ---
     function handleGpsSuccess(pos) {
-        // heading 속성 추가 (GPS Course over Ground)
         const { latitude, longitude, accuracy, heading } = pos.coords; 
         userGpsPosition = { lat: latitude, lon: longitude, acc: accuracy };
         
-        // 🌟🌟🌟 수정: GPS Course (이동 방향)을 Heading으로 사용합니다. 🌟🌟🌟
+        // 🌟 GPS Course (이동 방향)을 Heading으로 사용
         if (heading !== null && heading >= 0 && heading <= 360) {
             userGpsHeading = heading; 
         }
@@ -297,7 +300,6 @@
             const step = lastRouteData.steps[currentStepIndex];
             const target = AREA_COORDINATES[step.to_area];
             
-            // 🚨 중요 수정 반영: calculateDistance 함수의 인수를 (lat1, lon1, lat2, lon2)로 올바르게 수정
             const dist = calculateDistance(latitude, longitude, target.lat, target.lon); 
 
             updateNavigationBar(step, dist);
@@ -312,6 +314,10 @@
                     highlightStep(currentStepIndex);
                 }
             }
+            // 🌟🌟🌟 Heading Up 모드: 매 위치 업데이트마다 지도 중앙 이동 🌟🌟🌟
+            const center = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
+            mapTranslateX += canvas.width/2 - center.x;
+            mapTranslateY += canvas.height/2 - center.y;
         }
         drawMap(); 
     }
@@ -331,15 +337,7 @@
         drawMap();
     }
     
-    // 🌟🌟🌟 주석 처리: DeviceOrientation 센서는 사용하지 않습니다.
-    /*
-    function handleDeviceOrientation(e) {
-        if (e.alpha !== null) {
-            userGpsHeading = e.alpha; 
-            if (userGpsPosition) drawMap(); 
-        }
-    }
-    */
+    // (handleDeviceOrientation 함수는 제거됨)
 
     function applyGpsOffsetToMap(userLat, userLon) {
         if (!lastRouteData) return;
@@ -356,7 +354,6 @@
 
     function handleArrival() {
         if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-        // window.removeEventListener('deviceorientation', handleDeviceOrientation); // 주석 처리
         isNavigating = false;
         
         navInstruction.innerText = "목적지 도착!";
@@ -379,8 +376,10 @@
         let y = h - ((lat - mapBounds.minLat)/rLat)*h + oy;
 
         const cx = canvas.width/2; const cy = canvas.height/2;
+        // 줌/팬만 적용
         x = cx + (x-cx)*mapScale + mapTranslateX;
-        y = cy + (y-cy)*mapScale + mapTranslateY;
+        y = cy + (y-cy)*mapScale + mapTranslateY; 
+        
         return {x,y};
     }
 
@@ -388,7 +387,21 @@
         const cw = canvas.parentElement.clientWidth;
         canvas.width = Math.min(cw, 900); canvas.height = canvas.width*0.6;
         if(canvas.height<300) canvas.height=300;
+        
+        ctx.save();
         ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        const cx = canvas.width/2; 
+        const cy = canvas.height/2;
+        
+        // 🌟🌟🌟 Heading Up 핵심 로직: 캔버스 회전 🌟🌟🌟
+        if(isNavigating && userGpsPosition) {
+            // userGpsHeading (북쪽 0) 만큼 지도를 반시계 방향으로 회전시켜서 현재 이동 방향(Heading)을 위쪽(0도)으로 맞춥니다.
+            const rotationAngle = -userGpsHeading * Math.PI / 180;
+            ctx.translate(cx, cy);
+            ctx.rotate(rotationAngle);
+            ctx.translate(-cx, -cy);
+        }
 
         // 1. 링크
         ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=2;
@@ -414,19 +427,16 @@
         if(userGpsPosition) {
             const p = latLonToCanvas(userGpsPosition.lat, userGpsPosition.lon);
             
-            // 부채꼴 (파란색)
+            // 🌟 부채꼴: 지도가 회전했으므로, 항상 캔버스 '위쪽'을 가리키도록 고정
             const r = 25 * 1.5 * mapScale; 
-            // 🌟 userGpsHeading (GPS Course)를 사용하여 방향을 설정합니다.
-            // 캔버스 좌표계에 맞춰 변환 (북쪽 0, 시계 방향 증가)
-            const rad = (userGpsHeading - 90) * Math.PI/180; // 0도를 오른쪽(동쪽)이 아닌 위쪽(북쪽)으로 맞추기 위해 조정
             const fov = 60 * Math.PI/180;
-            const viewAngle = rad;
+            const fixedAngle = -90 * Math.PI / 180; // 캔버스 y축 기준 -90도(위쪽)
 
             ctx.beginPath(); ctx.moveTo(p.x,p.y);
-            ctx.arc(p.x, p.y, r, viewAngle - fov/2, viewAngle + fov/2);
+            ctx.arc(p.x, p.y, r, fixedAngle - fov/2, fixedAngle + fov/2);
             ctx.closePath(); ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; ctx.fill();
 
-            // 노란 점 (10px)
+            // 노란 점 
             ctx.beginPath(); ctx.arc(p.x, p.y, 10*mapScale, 0, Math.PI*2);
             ctx.fillStyle='#facc15'; ctx.fill(); 
             ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
@@ -450,6 +460,8 @@
             ctx.fillStyle='#333'; ctx.font=`${12*mapScale}px sans-serif`; ctx.textAlign='center';
             ctx.fillText(id, p.x, p.y - 16*mapScale);
         });
+
+        ctx.restore(); // 회전된 상태 해제
     }
 
     function calculatePath(start, end) { 
@@ -517,7 +529,7 @@
         });
     }
 
-    // 줌/팬 인터랙션 (기존 코드 그대로 유지)
+    // 줌/팬 인터랙션 (Heading Up 모드에서 줌/팬이 작동하도록 로직 유지)
     function setupInteractions() {
         canvas.addEventListener('wheel', e=>{ e.preventDefault(); mapScale=Math.max(0.6,Math.min(5, mapScale*(e.deltaY<0?1.1:0.9))); drawMap(); }, {passive:false});
         let st=[];
@@ -540,7 +552,6 @@
 
     function resetApp() {
         if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-        // window.removeEventListener('deviceorientation', handleDeviceOrientation); // 주석 처리
         isNavigating = false;
 
         lastRouteData=null; currentStepIndex=0; userGpsPosition=null; userGpsHeading=0;
@@ -555,7 +566,7 @@
     }
 
     function loadRouteFromUrl() {
-        // 🌟 QR 코드 인식 로직 (URL 파라미터 기반)
+        // QR 코드 인식 로직 (URL 파라미터 기반)
         const p = new URLSearchParams(window.location.search);
         if(p.get('start') && AREA_IDS.includes(p.get('start'))) {
             startSelect.value = p.get('start');
