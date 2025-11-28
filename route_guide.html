@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>✈️ 공항 실내 GPS (100% 리얼 GPS)</title>
+    <title>✈️ 공항 실내 GPS (리얼 GPS + 모바일 최적화)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -17,14 +17,14 @@
             box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); min-height:300px; 
             touch-action: none; 
         }
-        /* 🚨 UI 문제 해결을 위한 CSS 수정: 패딩 및 높이 최적화 */
+        /* 🚨 모바일 UI 최적화: 하단 바 패딩 및 높이 조정 */
         #navigation-bar { 
             position: fixed; bottom:0; left:0; right:0; z-index: 50; 
             background:#1e3a8a; color:white; 
             box-shadow: 0 -4px 12px rgba(0,0,0,0.2); 
             border-top-left-radius:1rem; border-top-right-radius:1rem; 
             transform: translateY(100%); transition: transform .3s ease-in-out; 
-            padding: 0.75rem 1rem; /* 수정: 수직 패딩 감소 */
+            padding: 0.75rem 1rem; /* 수직 패딩 감소 */
         }
         #navigation-bar.active { transform: translateY(0); }
         /* 긴 텍스트가 잘리지 않도록 min-width: 0 적용 */
@@ -129,7 +129,7 @@
     let isNavigating = false;
     let gpsWatchId = null;
     let userGpsPosition = null;
-    let userGpsHeading = 0; 
+    let userGpsHeading = 0; // 이제 GPS Course 값을 저장합니다. 
     
     // 맵 뷰 상태
     let mapScale = 1.0;
@@ -164,7 +164,7 @@
     recalculateMapBounds();
 
     // -------------------------
-    // 핵심 로직: 버튼 및 GPS 제어 (버그 해결 로직 적용)
+    // 핵심 로직: 버튼 및 GPS 제어
     // -------------------------
 
     function updateGpsStatus(type, message) {
@@ -209,7 +209,6 @@
         drawMap();
 
         navBar.classList.add('active');
-        // 🚨 UI 수정 적용: '내비 시작'으로 단축
         navControlButton.innerText = '내비 시작'; 
         navControlButton.disabled = false;
         navControlButton.className = "px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600";
@@ -229,7 +228,6 @@
 
     function toggleNavigation() {
         if (!lastRouteData) return;
-        // 🚨 UI 수정 적용: '재설정'으로 단축
         if (navControlButton.innerText === '재설정') { resetApp(); return; } 
 
         if (isNavigating) {
@@ -242,19 +240,13 @@
     function startNavigation() {
         if (!navigator.geolocation) { alert("GPS를 지원하지 않습니다."); return; }
         
-        // 🚨 UI 수정 적용: '내비 정지'로 단축
         isNavigating = true;
         navControlButton.innerText = '내비 정지'; 
         navControlButton.className = "px-5 py-2 bg-yellow-500 text-white font-bold rounded-full shadow-lg hover:bg-yellow-600";
         updateGpsStatus("ok", "GPS 추적 시작. 위치 정보 수신 대기 중...");
 
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission().then(state => {
-                if(state==='granted') window.addEventListener('deviceorientation', handleDeviceOrientation);
-            }).catch(console.error);
-        } else {
-            window.addEventListener('deviceorientation', handleDeviceOrientation);
-        }
+        // 🌟🌟🌟 수정: DeviceOrientationEvent 리스너 등록 부분을 제거 (GPS Course 사용) 🌟🌟🌟
+        // window.addEventListener('deviceorientation', handleDeviceOrientation); 를 사용하지 않습니다.
 
         if (!gpsWatchId) { 
             gpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, {
@@ -277,21 +269,27 @@
     function stopNavigation() {
         if (!isNavigating) return;
         
-        // 🚨 UI 수정 적용: '내비 재개'로 단축
         isNavigating = false;
         
         navControlButton.innerText = '내비 재개'; 
         navControlButton.className = "px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600";
         updateGpsStatus("error", "GPS 추적 일시 중지됨. 재개를 누르세요.");
         
-        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+        // 🌟🌟🌟 수정: DeviceOrientationEvent 리스너 제거 부분도 주석 처리합니다. 🌟🌟🌟
+        // window.removeEventListener('deviceorientation', handleDeviceOrientation); 
     }
 
     // --- GPS 및 센서 핸들러 ---
     function handleGpsSuccess(pos) {
-        const { latitude, longitude, accuracy } = pos.coords;
+        // heading 속성 추가 (GPS Course over Ground)
+        const { latitude, longitude, accuracy, heading } = pos.coords; 
         userGpsPosition = { lat: latitude, lon: longitude, acc: accuracy };
         
+        // 🌟🌟🌟 수정: GPS Course (이동 방향)을 Heading으로 사용합니다. 🌟🌟🌟
+        if (heading !== null && heading >= 0 && heading <= 360) {
+            userGpsHeading = heading; 
+        }
+
         let statusMsg = `GPS 정확도: ${accuracy.toFixed(1)}m. ${isNavigating?'추적 중.':'일시 정지됨.'}`;
         updateGpsStatus("ok", statusMsg);
 
@@ -299,7 +297,7 @@
             const step = lastRouteData.steps[currentStepIndex];
             const target = AREA_COORDINATES[step.to_area];
             
-            // 🚨 중요 수정: calculateDistance 함수의 인수를 (lat1, lon1, lat2, lon2)로 수정
+            // 🚨 중요 수정 반영: calculateDistance 함수의 인수를 (lat1, lon1, lat2, lon2)로 올바르게 수정
             const dist = calculateDistance(latitude, longitude, target.lat, target.lon); 
 
             updateNavigationBar(step, dist);
@@ -332,14 +330,16 @@
         }
         drawMap();
     }
-
+    
+    // 🌟🌟🌟 주석 처리: DeviceOrientation 센서는 사용하지 않습니다.
+    /*
     function handleDeviceOrientation(e) {
         if (e.alpha !== null) {
-            // 알파(alpha) 값은 Z축을 기준으로 회전(나침반 방향)을 나타냅니다.
             userGpsHeading = e.alpha; 
             if (userGpsPosition) drawMap(); 
         }
     }
+    */
 
     function applyGpsOffsetToMap(userLat, userLon) {
         if (!lastRouteData) return;
@@ -356,12 +356,11 @@
 
     function handleArrival() {
         if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+        // window.removeEventListener('deviceorientation', handleDeviceOrientation); // 주석 처리
         isNavigating = false;
         
         navInstruction.innerText = "목적지 도착!";
         document.getElementById('nav-step-info').innerText = "안내 종료";
-        // 🚨 UI 수정 적용: '재설정'으로 단축
         navControlButton.innerText = '재설정'; 
         navControlButton.className = "px-5 py-2 bg-blue-600 text-white font-bold rounded-full shadow-lg";
         updateGpsStatus("ok", "도착 완료");
@@ -417,12 +416,11 @@
             
             // 부채꼴 (파란색)
             const r = 25 * 1.5 * mapScale; 
-            // 🚨 userGpsHeading은 0~360 (북쪽 0). 캔버스 좌표계에 맞춰 변환 필요
-            // 캔버스는 y축이 아래로 증가하며, 0도가 오른쪽(동쪽)을 가리킵니다.
-            // alpha(heading)를 라디안으로 변환하고, 캔버스 y축 방향을 맞추기 위해 반전(negate) 및 오프셋 조정합니다.
-            const rad = (360 - userGpsHeading) * Math.PI/180; // Heading을 캔버스 회전 방향(시계 방향)에 맞춤
+            // 🌟 userGpsHeading (GPS Course)를 사용하여 방향을 설정합니다.
+            // 캔버스 좌표계에 맞춰 변환 (북쪽 0, 시계 방향 증가)
+            const rad = (userGpsHeading - 90) * Math.PI/180; // 0도를 오른쪽(동쪽)이 아닌 위쪽(북쪽)으로 맞추기 위해 조정
             const fov = 60 * Math.PI/180;
-            const viewAngle = rad + Math.PI/2; // 0도를 윗방향(북쪽)으로 맞추기 위해 90도(PI/2) 더함
+            const viewAngle = rad;
 
             ctx.beginPath(); ctx.moveTo(p.x,p.y);
             ctx.arc(p.x, p.y, r, viewAngle - fov/2, viewAngle + fov/2);
@@ -473,7 +471,6 @@
             const c=ALL_CONNECTIONS.find(x=>x.u===path[i] && x.v===path[i+1]);
             steps.push({ to_area:path[i+1], distance:c.distance, turn:c.turn, instruction:c.instruction });
         }
-        // 총 시간을 걸음 속도(1.0m/s) 기준으로 대략 계산 (총 거리를 60초로 나눠 분으로 환산)
         return { steps, totalDist:dists[end], totalTime:Math.ceil(dists[end]/1.0/60), path }; 
     }
 
@@ -486,14 +483,12 @@
     function updateNavigationBar(step, dist) {
         navInstruction.innerText = step.instruction;
         document.getElementById('nav-step-info').innerText = `남은 거리: ${Math.round(dist)}m`;
-        // 🚨 아이콘 크기 w-7 h-7로 조정
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="${TURN_ICONS[step.turn]||'arrow-up'}" class="w-7 h-7"></i>`;
         lucide.createIcons();
     }
 
     function renderGuidanceSummary(data) {
         outputDiv.innerHTML = `<div class="mb-4 p-4 bg-blue-50 border-b border-blue-200 rounded-lg"><p class="font-bold text-lg">총 ${Math.round(data.totalDist)}m, 약 ${data.totalTime}분</p></div>`;
-        // 🚨 UI 수정 적용: '내비 시작'으로 단축
         document.getElementById('nav-next-instruction').textContent = '내비 시작을 눌러주세요.'; 
         lucide.createIcons();
     }
@@ -545,7 +540,7 @@
 
     function resetApp() {
         if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+        // window.removeEventListener('deviceorientation', handleDeviceOrientation); // 주석 처리
         isNavigating = false;
 
         lastRouteData=null; currentStepIndex=0; userGpsPosition=null; userGpsHeading=0;
@@ -553,7 +548,6 @@
         AREA_IDS.forEach(id=>{ AREA_COORDINATES[id].lat=ORIGINAL_AREA_COORDINATES[id].lat; AREA_COORDINATES[id].lon=ORIGINAL_AREA_COORDINATES[id].lon; });
         recalculateMapBounds(); drawMap();
         navBar.classList.remove('active');
-        // 🚨 UI 수정 적용: '내비 시작'으로 단축
         navControlButton.innerText = '내비 시작'; navControlButton.disabled = true;
         navControlButton.className = "px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg";
         updateGpsStatus('error', "준비: 경로를 설정하고 '준비' 버튼을 누르세요.");
@@ -561,6 +555,7 @@
     }
 
     function loadRouteFromUrl() {
+        // 🌟 QR 코드 인식 로직 (URL 파라미터 기반)
         const p = new URLSearchParams(window.location.search);
         if(p.get('start') && AREA_IDS.includes(p.get('start'))) {
             startSelect.value = p.get('start');
@@ -579,7 +574,6 @@
     // --- 초기화 ---
     window.onload = function() {
         populate(); loadRouteFromUrl(); setupInteractions(); recalculateMapBounds(); drawMap();
-        // 🚨 아이콘 크기 w-7 h-7로 조정
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-7 h-7"></i>`;
         lucide.createIcons();
         searchButton.addEventListener('click', startRouteGuidance);
