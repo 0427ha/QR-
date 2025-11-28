@@ -14,9 +14,14 @@
         .gps-status-err { background-color: #fee2e2; color: #991b1b; border:1px solid #f87171; }
         
         #route-map { 
-            width:100%; height:auto; border:1px solid #e5e7eb; background:#fff; border-radius:.75rem; 
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); min-height:350px; 
+            width:100%; 
+            /* 캔버스 자체의 스타일 높이를 고정하여 늘어짐 방지 (JS에서 최종 height 조정) */
+            height: 350px; 
+            border:1px solid #e5e7eb; background:#fff; border-radius:.75rem; 
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); 
+            min-height:350px; 
             touch-action: none; 
+            display: block; 
         }
 
         /* 상세 경로 목록 스타일 */
@@ -87,7 +92,7 @@
 
         <div class="card p-5 rounded-xl">
             <h2 class="text-lg font-bold text-gray-700 mb-3">실시간 지도</h2>
-            <canvas id="route-map" width="900" height="520"></canvas>
+            <canvas id="route-map"></canvas>
             
             <div id="route-guidance-output" class="mt-4">
                 <p class="text-gray-500 text-sm">경로를 설정하면 안내가 시작됩니다.</p>
@@ -127,21 +132,22 @@
     };
     let ORIGINAL_AREA_COORDINATES = JSON.parse(JSON.stringify(AREA_COORDINATES));
 
+    // instruction에서 순서 번호(예: "1. ") 제거
     const CONNECTIONS_DATA = [
-        { u:'A', v:'B', distance:15, turn:"직진", instruction:"1. 오른쪽 면세품 수령 데스크 방향으로 직진" }, 
-        { u:'B', v:'C', distance:15, turn:"직진", instruction:"2. 환전소 방향 직진" },
-        { u:'D', v:'E', distance:15, turn:"직진", instruction:"3. 출국 심사대 방향 직진" }, 
-        { u:'E', v:'F', distance:15, turn:"직진", instruction:"4. 푸드코트 방향 직진" },
-        { u:'G', v:'H', distance:15, turn:"직진", instruction:"5. 면세점 방향 직진" }, 
-        { u:'H', v:'I', distance:15, turn:"직진", instruction:"6. 탑승구 방향 직진" },
-        { u:'A', v:'D', distance:17, turn:"직진", instruction:"7. 에스컬레이터 (2층행) 탑승" }, 
-        { u:'B', v:'E', distance:17, turn:"직진", instruction:"8. 에스컬레이터 (2층행) 탑승" },
-        { u:'C', v:'F', distance:17, turn:"직진", instruction:"9. 에스컬레이터 (2층행) 탑승" },
-        { u:'D', v:'G', distance:17, turn:"직진", instruction:"10. 에스컬레이터 (3층행) 탑승" },
-        { u:'E', v:'H', distance:17, turn:"직진", instruction:"11. 에스컬레이터 (3층행) 탑승" },
-        { u:'F', v:'I', distance:17, turn:"직진", instruction:"12. 에스컬레이터 (3층행) 탑승" },
-        { u:'A', v:'E', distance:21, turn:"우회전", instruction:"13. 대각선 길을 따라 우회전" }, 
-        { u:'E', v:'C', distance:21, turn:"좌회전", instruction:"14. 대각선 길을 따라 좌회전" }
+        { u:'A', v:'B', distance:15, turn:"직진", instruction:"오른쪽 면세품 수령 데스크 방향으로 직진" }, 
+        { u:'B', v:'C', distance:15, turn:"직진", instruction:"환전소 방향 직진" },
+        { u:'D', v:'E', distance:15, turn:"직진", instruction:"출국 심사대 방향 직진" }, 
+        { u:'E', v:'F', distance:15, turn:"직진", instruction:"푸드코트 방향 직진" },
+        { u:'G', v:'H', distance:15, turn:"직진", instruction:"면세점 방향 직진" }, 
+        { u:'H', v:'I', distance:15, turn:"직진", instruction:"탑승구 방향 직진" },
+        { u:'A', v:'D', distance:17, turn:"직진", instruction:"에스컬레이터 (2층행) 탑승" }, 
+        { u:'B', v:'E', distance:17, turn:"직진", instruction:"에스컬레이터 (2층행) 탑승" },
+        { u:'C', v:'F', distance:17, turn:"직진", instruction:"에스컬레이터 (2층행) 탑승" },
+        { u:'D', v:'G', distance:17, turn:"직진", instruction:"에스컬레이터 (3층행) 탑승" },
+        { u:'E', v:'H', distance:17, turn:"직진", instruction:"에스컬레이터 (3층행) 탑승" },
+        { u:'F', v:'I', distance:17, turn:"직진", instruction:"에스컬레이터 (3층행) 탑승" },
+        { u:'A', v:'E', distance:21, turn:"우회전", instruction:"대각선 길을 따라 우회전" }, 
+        { u:'E', v:'C', distance:21, turn:"좌회전", instruction:"대각선 길을 따라 좌회전" }
     ];
 
     const ALL_CONNECTIONS = [];
@@ -185,12 +191,13 @@
     const gpsStatusMessage = document.getElementById('gps-status-message');
     const canvas = document.getElementById('route-map');
     const ctx = canvas.getContext('2d');
-    const routeStepsList = document.getElementById('route-steps-list'); // 🌟 추가
+    const routeStepsList = document.getElementById('route-steps-list');
 
     const mapBounds = { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity };
 
     // --- 4. 함수 정의 ---
 
+    // 🌟 지도 비율 계산을 위해 위도/경도 범위 계산
     function recalculateMapBounds() {
         mapBounds.minLat = Infinity; mapBounds.maxLat = -Infinity; mapBounds.minLon = Infinity; mapBounds.maxLon = -Infinity;
         AREA_IDS.forEach(id => {
@@ -198,6 +205,9 @@
             mapBounds.minLat = Math.min(mapBounds.minLat, c.lat); mapBounds.maxLat = Math.max(mapBounds.maxLat, c.lat);
             mapBounds.minLon = Math.min(mapBounds.minLon, c.lon); mapBounds.maxLon = Math.max(mapBounds.maxLon, c.lon);
         });
+        
+        // 지도 비율 조정을 위해 resizeCanvas 호출
+        resizeCanvas();
     }
 
     function updateGpsStatus(type, message) {
@@ -223,7 +233,6 @@
         lastRouteData = { ...result, start: startId, end: endId };
         currentStepIndex = 0;
 
-        // 🌟 경로 정보 요약 및 상세 목록 렌더링
         renderGuidanceSummary(lastRouteData);
         renderStepsList(lastRouteData);
         
@@ -251,7 +260,7 @@
     function startNavigation() {
         if (!navigator.geolocation) { alert("GPS 권한이 필요합니다."); return; }
 
-        // 지도 상태 초기화 (캔버스 늘어남 방지 및 초기화)
+        // 지도 상태 초기화
         mapScale = 1.0;
         mapTranslateX = 0;
         mapTranslateY = 0;
@@ -320,9 +329,9 @@
             const target = AREA_COORDINATES[step.to_area];
             const distToNext = calculateDistance(latitude, longitude, target.lat, target.lon);
 
-            // 🌟 거리 불일치 및 UI 업데이트
+            // UI 업데이트
             updateNavigationBar(step, totalRemainingDist);
-            renderStepsList(lastRouteData); // 현재 단계를 노란색으로 하이라이트
+            renderStepsList(lastRouteData); 
 
             updateGpsStatus("ok", `GPS 수신중 (정확도 ${Math.round(accuracy)}m)`);
 
@@ -358,7 +367,7 @@
         navControlButton.innerText = "재설정";
         navControlButton.className = "px-5 py-2 bg-blue-600 text-white font-bold rounded-full shadow-lg";
         updateGpsStatus("ok", "목적지에 도착했습니다.");
-        renderStepsList(lastRouteData); // 마지막 단계 하이라이트 해제
+        renderStepsList(lastRouteData);
         alert("도착했습니다!");
     }
 
@@ -376,11 +385,14 @@
         const rLat = mapBounds.maxLat - mapBounds.minLat || 0.000001;
         const rLon = mapBounds.maxLon - mapBounds.minLon || 0.000001;
         const pad = 0.1;
-        const w = canvas.width * (1-2*pad); const h = canvas.height * (1-2*pad);
-        const ox = canvas.width*pad; const oy = canvas.height*pad;
         
-        let x = ((lon - mapBounds.minLon)/rLon)*w + ox;
-        let y = h - ((lat - mapBounds.minLat)/rLat)*h + oy;
+        const mapWidth = canvas.width * (1-2*pad); 
+        const mapHeight = canvas.height * (1-2*pad);
+        const ox = canvas.width*pad; 
+        const oy = canvas.height*pad;
+        
+        let x = ((lon - mapBounds.minLon)/rLon)*mapWidth + ox;
+        let y = mapHeight - ((lat - mapBounds.minLat)/rLat)*mapHeight + oy;
 
         const cx = canvas.width/2; const cy = canvas.height/2;
         // 줌/팬 적용
@@ -390,15 +402,6 @@
     }
 
     function drawMap() {
-        // 🌟 캔버스 크기가 늘어나는 현상 방지: 내비게이션 중이 아닐 때만 캔버스 크기를 부모 컨테이너에 맞춤
-        // 내비게이션이 시작되면 캔버스 크기는 고정됨.
-        if (!isNavigating) { 
-            const rect = canvas.parentElement.getBoundingClientRect();
-            // 캔버스 크기를 부모 요소에 맞춰 고정
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-        }
-
         const cx = canvas.width/2; const cy = canvas.height/2;
 
         ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -468,7 +471,7 @@
         ctx.restore();
     }
 
-    // --- 유틸리티 ---
+    // --- 유틸리티 (경로 계산, 거리 계산) ---
     function calculatePath(start, end) {
         const dists={}, prev={}, q=new Set(AREA_IDS);
         AREA_IDS.forEach(i=>dists[i]=Infinity); dists[start]=0;
@@ -505,7 +508,7 @@
         return remaining;
     }
 
-    // 🌟🌟🌟 전체 경로 목록 렌더링 함수 (Step List) 🌟🌟🌟
+    // 🌟🌟🌟 전체 경로 목록 렌더링 함수 수정 (볼드체 제거) 🌟🌟🌟
     function renderStepsList(data) {
         if (!data || data.steps.length === 0) {
             routeStepsList.innerHTML = '';
@@ -514,21 +517,21 @@
 
         let html = '';
         data.steps.forEach((step, index) => {
-            // 현재 단계 하이라이트 적용
-            const isCurrent = index === currentStepIndex && isNavigating;
+            const isCurrent = isNavigating && index === currentStepIndex;
             const iconKey = step.turn === '직진' ? 'arrow-up' : step.turn === '우회전' ? 'corner-down-right' : step.turn === '좌회전' ? 'corner-down-left' : 'map-pin';
+            
+            const stepNumber = index + 1;
 
             html += `
                 <div class="step-item ${isCurrent ? 'current' : ''}">
                     <i data-lucide="${iconKey}" class="w-4 h-4 text-gray-500 mr-3"></i>
-                    <span class="text-sm text-gray-700">${step.instruction} (${step.distance}m)</span>
+                    <span class="text-sm text-gray-700">${stepNumber}. ${step.instruction} (${step.distance}m)</span>
                 </div>
             `;
         });
         routeStepsList.innerHTML = html;
         lucide.createIcons();
         
-        // 현재 단계로 스크롤 이동 (내비게이션 중일 때)
         if (isNavigating) {
             const currentElement = routeStepsList.querySelector('.current');
             if (currentElement) {
@@ -538,7 +541,7 @@
     }
     // -----------------------------------------------------
 
-    // 🌟 하단 내비게이션 바 업데이트 (총거리 통일성 확보)
+    // 하단 내비게이션 바 업데이트 (총거리 통일성 확보)
     function updateNavigationBar(step, totalRemainingDist) {
         document.getElementById('nav-next-instruction').innerText = step.instruction;
         document.getElementById('nav-step-info').innerText = `남은 총 거리: ${Math.round(totalRemainingDist)}m`;
@@ -569,7 +572,7 @@
         canvas.addEventListener('wheel', e=>{ 
             e.preventDefault(); 
             mapScale=Math.max(0.6,Math.min(5, mapScale*(e.deltaY<0?1.1:0.9))); 
-            if(!isNavigating) drawMap(); 
+            drawMap(); 
         }, {passive:false});
         
         // 팬 (Pan)
@@ -589,22 +592,55 @@
         canvas.addEventListener('touchend', ()=>isD=false);
     }
 
+    // 🌟🌟🌟 캔버스 크기 조정 함수 수정 (지도 비율 고정) 🌟🌟🌟
+    const resizeCanvas = () => {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        
+        const lonRange = mapBounds.maxLon - mapBounds.minLon;
+        const latRange = mapBounds.maxLat - mapBounds.minLat;
+
+        // 위도와 경도 차이가 너무 작으면 기본값 사용 (나누기 0 방지)
+        if (lonRange === 0 || latRange === 0) {
+             canvas.width = rect.width;
+             canvas.height = canvas.offsetHeight;
+        } else {
+             // 1도는 위도에 따라 미터 길이가 다르지만, 간편화를 위해 이 범위의 비율만 사용
+             const aspectRatio = latRange / lonRange; 
+             
+             // 캔버스 width는 부모 요소의 width에 맞춥니다.
+             canvas.width = rect.width; 
+             
+             // 캔버스 height를 width와 위도/경도 범위의 비율에 맞춰 조정하여 비율을 유지
+             // 1:1에 가까운 비율을 원한다면, 실제 경도/위도 비율 (1:1.6~2.0)을 적용해야 합니다.
+             // 임시로 가로(lon) 범위와 세로(lat) 범위의 픽셀 비율을 맞춰 정사각형처럼 보이게 합니다.
+             // 실제 정사각형 모양을 위해 캔버스 높이를 계산
+             const calculatedHeight = rect.width * aspectRatio; 
+             
+             // 최소 높이 (min-height: 350px)를 보장하면서 계산된 높이를 적용
+             canvas.height = Math.max(350, calculatedHeight); 
+             
+             // CSS height 스타일도 동기화하여 시각적으로도 늘어지지 않게 합니다.
+             canvas.style.height = `${canvas.height}px`;
+        }
+        
+        drawMap();
+    };
+    // -------------------------------------------------------------------
+
     window.onload = function() {
-        populate(); recalculateMapBounds(); setupInteractions(); 
+        populate(); 
+        recalculateMapBounds(); // 여기서 resizeCanvas가 처음 호출되어 비율을 맞춥니다.
+        setupInteractions(); 
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-7 h-7"></i>`;
         lucide.createIcons();
         
         const p = new URLSearchParams(window.location.search);
         if(p.get('start') && AREA_IDS.includes(p.get('start'))) startSelect.value = p.get('start');
         
-        const resizeCanvas = () => {
-            const rect = canvas.parentElement.getBoundingClientRect();
-            // 캔버스 초기 크기 고정 (늘어남 방지)
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-            drawMap();
-        };
-        window.addEventListener('resize', resizeCanvas);
+        // 창 크기가 변경될 때, 캔버스 크기를 다시 계산하고 지도를 다시 그립니다.
+        window.addEventListener('resize', resizeCanvas); 
+        
+        // 폰트 및 DOM 로딩을 위한 최종 보정
         setTimeout(resizeCanvas, 100);
     };
     </script>
