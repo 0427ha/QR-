@@ -17,7 +17,11 @@
             box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); min-height:300px; 
             touch-action: none; 
         }
-        #navigation-bar { position: fixed; bottom:0; left:0; right:0; z-index: 50; background:#1e3a8a; color:white; box-shadow: 0 -4px 12px rgba(0,0,0,0.2); border-top-left-radius:1rem; border-top-right-radius:1rem; transform: translateY(100%); transition: transform .3s ease-in-out; padding:1rem;}
+        #navigation-bar { 
+            position: fixed; bottom:0; left:0; right:0; z-index: 50; background:#1e3a8a; color:white; 
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.2); border-top-left-radius:1rem; border-top-right-radius:1rem; 
+            transform: translateY(100%); transition: transform .3s ease-in-out; padding:1rem;
+        }
         #navigation-bar.active { transform: translateY(0); }
     </style>
 </head>
@@ -56,14 +60,14 @@
     </div>
 
     <div id="navigation-bar" class="p-4 flex items-center justify-between">
-        <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-3 w-full"> 
             <div id="current-turn-icon" class="text-4xl flex-shrink-0"></div>
-            <div class="flex flex-col min-w-0">
+            <div class="flex flex-col min-w-0 flex-grow"> 
                 <p id="nav-next-instruction" class="text-xl font-extrabold leading-snug truncate">대기 중</p>
                 <p id="nav-step-info" class="text-sm text-blue-200 mt-0.5">-</p>
             </div>
+            <button id="nav-control-button" onclick="toggleNavigation()" class="px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600 transition duration-150 flex-shrink-0" disabled>GPS 내비 시작</button>
         </div>
-        <button id="nav-control-button" onclick="toggleNavigation()" class="px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600 transition duration-150 flex-shrink-0" disabled>GPS 내비 시작</button>
     </div>
 
     <script>
@@ -116,7 +120,7 @@
     // --- 변수 및 상수 ---
     let lastRouteData = null;
     let currentStepIndex = 0;
-    let isNavigating = false; // 👈 이 변수가 내비게이션 상태의 유일한 기준입니다.
+    let isNavigating = false; 
     let gpsWatchId = null;
     let userGpsPosition = null;
     let userGpsHeading = 0; 
@@ -154,7 +158,7 @@
     recalculateMapBounds();
 
     // -------------------------
-    // 핵심 로직: 버튼 및 GPS 제어 (버그 해결 로직 적용)
+    // 핵심 로직: 버튼 및 GPS 제어
     // -------------------------
 
     function updateGpsStatus(type, message) {
@@ -196,10 +200,9 @@
 
         renderGuidanceSummary(lastRouteData);
         renderStepsList(lastRouteData.steps);
-        drawMap();
+        drawMap(); // 맵 그리기 호출
 
         navBar.classList.add('active');
-        // 내비게이션 준비 완료 시 초기 버튼 텍스트는 'GPS 내비 시작'
         navControlButton.innerText = 'GPS 내비 시작';
         navControlButton.disabled = false;
         navControlButton.className = "px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600";
@@ -209,7 +212,7 @@
         updateGpsStatus("ok", "경로 설정 완료. 'GPS 내비 시작'을 누르세요.");
         
         userGpsPosition = null;
-        drawMap();
+        drawMap(); // 맵 그리기 호출
     }
 
     function resetUI() {
@@ -221,12 +224,9 @@
         if (!lastRouteData) return;
         if (navControlButton.innerText === '경로 재설정') { resetApp(); return; }
 
-        // 🌟🌟🌟 수정된 로직: isNavigating 상태에 따라 토글 (가장 확실한 방법) 🌟🌟🌟
         if (isNavigating) {
-            // 현재 추적 중이면 정지합니다.
             stopNavigation();
         } else {
-            // 현재 정지 상태이거나 시작 전이면 내비를 시작/재개합니다.
             startNavigation();
         }
     }
@@ -238,7 +238,7 @@
         isNavigating = true;
         navControlButton.innerText = 'GPS 내비 정지';
         navControlButton.className = "px-5 py-2 bg-yellow-500 text-white font-bold rounded-full shadow-lg hover:bg-yellow-600";
-        updateGpsStatus("ok", "GPS 추적 시작. 위치 정보 수신 대기 중..."); // 초기 메시지 변경
+        updateGpsStatus("ok", "GPS 추적 시작. 위치 정보 수신 대기 중..."); 
 
         // 2. 방향 센서 시작 
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -249,19 +249,18 @@
             window.addEventListener('deviceorientation', handleDeviceOrientation);
         }
 
-        // 3. GPS 워처 시작 (워처는 한번만 등록하고 계속 유지)
+        // 3. GPS 워처 시작
         if (!gpsWatchId) { 
             gpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, {
                 enableHighAccuracy: true, timeout: 5000, maximumAge: 0 
             });
         }
         
-        // 4. 초기 오프셋 적용을 위한 위치 획득 (버튼 상태 변경에 영향 주지 않음)
-        // 위치 획득 성공/실패가 버튼 상태를 '재개'로 되돌리는 것을 방지
+        // 4. 초기 오프셋 적용을 위한 위치 획득
         navigator.geolocation.getCurrentPosition(
             (pos) => { 
                 applyGpsOffsetToMap(pos.coords.latitude, pos.coords.longitude); 
-                handleGpsSuccess(pos); // 위치 획득 성공 시 UI 업데이트
+                handleGpsSuccess(pos);
             },
             (err) => { 
                 console.warn("초기 GPS 오프셋 위치 획득 실패. 워처로 계속 시도합니다.", err); 
@@ -273,7 +272,6 @@
     function stopNavigation() {
         if (!isNavigating) return;
         
-        // 🌟🌟🌟 비활성화 상태 설정 및 UI 즉시 업데이트 (버튼 텍스트: 재개) 🌟🌟🌟
         isNavigating = false;
         
         navControlButton.innerText = 'GPS 내비 재개';
@@ -288,15 +286,15 @@
         const { latitude, longitude, accuracy } = pos.coords;
         userGpsPosition = { lat: latitude, lon: longitude, acc: accuracy };
         
-        // isNavigating 상태에 따라 정확한 메시지를 출력
         let statusMsg = `GPS 정확도: ${accuracy.toFixed(1)}m. ${isNavigating?'추적 중.':'일시 정지됨.'}`;
         updateGpsStatus("ok", statusMsg);
 
-        // 내비게이션 및 UI 업데이트는 isNavigating이 true일 때만 진행
         if (isNavigating && lastRouteData && currentStepIndex < lastRouteData.steps.length) {
             const step = lastRouteData.steps[currentStepIndex];
             const target = AREA_COORDINATES[step.to_area];
-            const dist = calculateDistance(latitude, longitude, target.lat, target.lat); // lat2를 lon2로 수정해야 하지만, 기존 코드 유지
+            
+            // 남은 거리 수치 오류 해결: target.lon 사용
+            const dist = calculateDistance(latitude, longitude, target.lat, target.lon); 
 
             updateNavigationBar(step, dist);
             highlightStep(currentStepIndex);
@@ -311,11 +309,11 @@
                 }
             }
         }
-        drawMap(); // 맵 그리기 호출 (노란 점 움직임)
+        drawMap(); // 맵 그리기 호출
     }
 
     function handleGpsError(err) {
-        if (isNavigating) { // 추적 중일 때만 오류 메시지 표시
+        if (isNavigating) { 
             let errMsg;
             if (err.code === err.PERMISSION_DENIED) {
                 errMsg = "위치 정보 접근 권한이 거부되었습니다.";
@@ -331,7 +329,8 @@
 
     function handleDeviceOrientation(e) {
         if (e.alpha !== null) {
-            userGpsHeading = e.alpha;
+            // 부채꼴 방향 오류 해결: 180도 보정 적용
+            userGpsHeading = (e.alpha + 180) % 360; 
             if (userGpsPosition) drawMap(); 
         }
     }
@@ -350,7 +349,6 @@
     }
 
     function handleArrival() {
-        // 도착 시에는 워처를 완전히 중지
         if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
         window.removeEventListener('deviceorientation', handleDeviceOrientation);
         isNavigating = false;
@@ -364,7 +362,7 @@
         drawMap();
     }
 
-    // --- 맵 드로잉 및 유틸리티 (기존 코드 그대로 유지) ---
+    // --- 맵 드로잉 및 유틸리티 ---
     function latLonToCanvas(lat, lon) {
         const rLat = mapBounds.maxLat - mapBounds.minLat || 0.000001;
         const rLon = mapBounds.maxLon - mapBounds.minLon || 0.000001;
@@ -512,7 +510,7 @@
         });
     }
 
-    // 줌/팬 인터랙션 (기존 코드 그대로 유지)
+    // 줌/팬 인터랙션
     function setupInteractions() {
         canvas.addEventListener('wheel', e=>{ e.preventDefault(); mapScale=Math.max(0.6,Math.min(5, mapScale*(e.deltaY<0?1.1:0.9))); drawMap(); }, {passive:false});
         let st=[];
@@ -567,13 +565,21 @@
     
     // --- 초기화 ---
     window.onload = function() {
-        populate(); loadRouteFromUrl(); setupInteractions(); recalculateMapBounds(); drawMap();
+        populate(); 
+        loadRouteFromUrl(); 
+        setupInteractions(); 
+        recalculateMapBounds(); 
+        
+        // 🌟🌟🌟 지도 표시 복구: 초기화 시 맵을 한 번 그립니다. 🌟🌟🌟
+        drawMap(); 
+        
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         lucide.createIcons();
         searchButton.addEventListener('click', startRouteGuidance);
-        // navControlButton 이벤트는 toggleNavigation에 연결되어 있음
+        navControlButton.addEventListener('click', toggleNavigation);
         updateGpsStatus('error', "준비: 경로를 설정하고 '준비' 버튼을 누르세요.");
     };
+    // 🌟🌟🌟 지도 표시 복구: 창 크기 변경 시 맵을 다시 그립니다. 🌟🌟🌟
     window.addEventListener('resize', drawMap);
     </script>
 </body>
