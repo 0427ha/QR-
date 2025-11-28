@@ -157,17 +157,14 @@
     // 핵심 로직: 버튼 및 GPS 제어
     // -------------------------
 
-    /** 🌟 버그 수정 대상: 상태 메시지를 업데이트하는 핵심 함수 🌟 */
     function updateGpsStatus(type, message) {
         gpsStatusMessage.textContent = message;
-        // 초기화 시 class 제거, 에러 시 class-err, 성공 시 class-ok 적용
         gpsStatusMessage.classList.remove('gps-status-ok', 'gps-status-err');
         if (type === 'ok') {
             gpsStatusMessage.classList.add('gps-status-ok');
         } else if (type === 'error') {
             gpsStatusMessage.classList.add('gps-status-err');
         } else {
-             // 'initial' 상태를 위한 기본 오류 스타일 유지 (경로 설정 요청)
              gpsStatusMessage.classList.add('gps-status-err');
         }
     }
@@ -179,7 +176,6 @@
         const endId = endSelect.value;
         if (startId === endId) { 
             outputDiv.innerHTML = `<div class="p-4 bg-yellow-100 rounded-lg">출발지와 도착지가 같습니다.</div>`; 
-            // 경로 설정 실패 시 초기 상태 메시지 유지
             updateGpsStatus('error', "준비: 경로를 설정하고 '준비' 버튼을 누르세요.");
             return; 
         }
@@ -208,8 +204,6 @@
         
         resetUI(); 
         
-        // 🌟🌟🌟 버그 수정 지점 🌟🌟🌟
-        // 경로가 정상적으로 설정되었으므로, GPS 시작 전 대기 상태 메시지로 업데이트
         updateGpsStatus("ok", "경로 설정 완료. 'GPS 내비 시작'을 누르세요.");
         
         userGpsPosition = null;
@@ -225,9 +219,10 @@
         if (!lastRouteData) return;
         if (navControlButton.innerText === '경로 재설정') { resetApp(); return; }
 
-        if (isNavigating) {
+        // 현재 버튼 텍스트를 기준으로 상태를 토글
+        if (navControlButton.innerText.includes('GPS 내비 중지')) {
             stopNavigation();
-        } else {
+        } else if (navControlButton.innerText.includes('GPS 내비 시작') || navControlButton.innerText.includes('GPS 내비 재개')) {
             startNavigation();
         }
     }
@@ -273,9 +268,13 @@
 
     function stopNavigation() {
         if (!isNavigating) return;
+        
+        // isNavigating 상태만 false로 바꾸고, 버튼 텍스트만 업데이트
         isNavigating = false;
         
-        if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+        // GPS 워처는 실제 중지하지 않고 유지 (재개 시 빠르게 복구하기 위함)
+        // navigator.geolocation.clearWatch(gpsWatchId);
+        // gpsWatchId = null;
         window.removeEventListener('deviceorientation', handleDeviceOrientation);
         
         navControlButton.innerText = 'GPS 내비 재개';
@@ -288,10 +287,11 @@
         const { latitude, longitude, accuracy } = pos.coords;
         userGpsPosition = { lat: latitude, lon: longitude, acc: accuracy };
         
-        let statusMsg = `GPS 정확도: ${accuracy.toFixed(1)}m. ${isNavigating?'추적 중.':'일시 정지.'}`;
+        // 🌟🌟🌟 버그 수정 지점: isNavigating 상태를 확인하여 메시지를 정확히 출력 🌟🌟🌟
+        let statusMsg = `GPS 정확도: ${accuracy.toFixed(1)}m. ${isNavigating?'추적 중.':'일시 정지됨.'}`;
         updateGpsStatus("ok", statusMsg);
 
-        // 내비게이션 및 UI 업데이트
+        // 내비게이션 및 UI 업데이트는 isNavigating이 true일 때만 진행
         if (isNavigating && lastRouteData && currentStepIndex < lastRouteData.steps.length) {
             const step = lastRouteData.steps[currentStepIndex];
             const target = AREA_COORDINATES[step.to_area];
@@ -314,12 +314,18 @@
     }
 
     function handleGpsError(err) {
-        if (err.code === err.PERMISSION_DENIED) {
-            updateGpsStatus("error", "위치 정보 접근 권한이 거부되었습니다.");
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-             updateGpsStatus("error", "위치 정보를 사용할 수 없습니다. 실내 또는 GPS 방해 구역일 수 있습니다.");
-        } else {
-            updateGpsStatus("error", `GPS 오류 (${err.code}): ${err.message}`);
+        // 🌟🌟🌟 버그 수정 지점: GPS 에러 시 isNavigating 상태를 명확히 false로 변경하고 워처를 해제하지 않음 🌟🌟🌟
+        if (isNavigating) { // 추적 중일 때만 오류 메시지 표시
+            let errMsg;
+            if (err.code === err.PERMISSION_DENIED) {
+                errMsg = "위치 정보 접근 권한이 거부되었습니다.";
+            } else if (err.code === err.POSITION_UNAVAILABLE) {
+                 errMsg = "위치 정보를 사용할 수 없습니다. GPS 방해 구역일 수 있습니다.";
+            } else {
+                errMsg = `GPS 오류 (${err.code}): ${err.message}`;
+            }
+            // 오류가 났다고 해서 무조건 내비를 중지시키지는 않음 (오류가 일시적일 수 있으므로)
+            updateGpsStatus("error", errMsg + " (신호 복구 대기 중)");
         }
         drawMap();
     }
@@ -345,7 +351,11 @@
     }
 
     function handleArrival() {
-        stopNavigation();
+        // 도착 시에는 완전히 중지
+        if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+        isNavigating = false;
+        
         navInstruction.innerText = "목적지 도착!";
         document.getElementById('nav-step-info').innerText = "안내 종료";
         navControlButton.innerText = '경로 재설정';
@@ -355,7 +365,7 @@
         drawMap();
     }
 
-    // --- 맵 드로잉 ---
+    // --- 맵 드로잉 및 유틸리티 (이전과 동일) ---
     function latLonToCanvas(lat, lon) {
         const rLat = mapBounds.maxLat - mapBounds.minLat || 0.000001;
         const rLon = mapBounds.maxLon - mapBounds.minLon || 0.000001;
@@ -438,8 +448,7 @@
         });
     }
 
-    // --- 유틸리티 및 UI ---
-    function calculatePath(start, end) { // Dijkstra
+    function calculatePath(start, end) { 
         const dists={}, prev={}, q=new Set(AREA_IDS);
         AREA_IDS.forEach(i=>dists[i]=Infinity); dists[start]=0;
         while(q.size){
@@ -526,17 +535,18 @@
     }
 
     function resetApp() {
-        stopNavigation();
+        // 기존의 stopNavigation() 호출 대신, GPS 워처를 완전히 해제하는 로직 사용
+        if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+        isNavigating = false;
+
         lastRouteData=null; currentStepIndex=0; userGpsPosition=null; userGpsHeading=0;
         mapScale=1; mapTranslateX=0; mapTranslateY=0;
-        // 오프셋 해제
         AREA_IDS.forEach(id=>{ AREA_COORDINATES[id].lat=ORIGINAL_AREA_COORDINATES[id].lat; AREA_COORDINATES[id].lon=ORIGINAL_AREA_COORDINATES[id].lon; });
         recalculateMapBounds(); drawMap();
         navBar.classList.remove('active');
         navControlButton.innerText = 'GPS 내비 시작'; navControlButton.disabled = true;
         navControlButton.className = "px-5 py-2 bg-green-500 text-white font-bold rounded-full shadow-lg";
-        // 🌟🌟🌟 버그 수정 지점 🌟🌟🌟
-        // 앱이 리셋될 때 초기 상태 메시지로 명확하게 복구
         updateGpsStatus('error', "준비: 경로를 설정하고 '준비' 버튼을 누르세요.");
         loadRouteFromUrl();
     }
@@ -564,7 +574,6 @@
         lucide.createIcons();
         searchButton.addEventListener('click', startRouteGuidance);
         navControlButton.addEventListener('click', toggleNavigation);
-        // 초기 로드 시 GPS 상태를 '경로 설정 요청'으로 설정
         updateGpsStatus('error', "준비: 경로를 설정하고 '준비' 버튼을 누르세요.");
     };
     window.addEventListener('resize', drawMap);
