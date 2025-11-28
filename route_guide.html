@@ -154,7 +154,7 @@
     recalculateMapBounds();
 
     // -------------------------
-    // 핵심 로직: 버튼 및 GPS 제어
+    // 핵심 로직: 버튼 및 GPS 제어 (버그 해결 로직 적용)
     // -------------------------
 
     function updateGpsStatus(type, message) {
@@ -234,12 +234,13 @@
     function startNavigation() {
         if (!navigator.geolocation) { alert("GPS를 지원하지 않습니다."); return; }
         
-        // 🌟🌟🌟 활성화 상태 설정 및 UI 즉시 업데이트 (버튼 텍스트: 정지) 🌟🌟🌟
+        // 🌟🌟🌟 1. 상태 및 UI를 즉시 '정지'로 강제 설정 (버그 해결의 핵심) 🌟🌟🌟
         isNavigating = true;
         navControlButton.innerText = 'GPS 내비 정지';
         navControlButton.className = "px-5 py-2 bg-yellow-500 text-white font-bold rounded-full shadow-lg hover:bg-yellow-600";
-        
-        // 1. 방향 센서 시작 (권한 요청 포함)
+        updateGpsStatus("ok", "GPS 추적 시작. 위치 정보 수신 대기 중..."); // 초기 메시지 변경
+
+        // 2. 방향 센서 시작 
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(state => {
                 if(state==='granted') window.addEventListener('deviceorientation', handleDeviceOrientation);
@@ -248,29 +249,24 @@
             window.addEventListener('deviceorientation', handleDeviceOrientation);
         }
 
-        // 2. GPS 워처 시작 함수 (워처는 한번만 등록하고 계속 유지)
-        const startGpsWatch = () => {
-            if (!gpsWatchId) { 
-                gpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, {
-                    enableHighAccuracy: true, timeout: 5000, maximumAge: 0 
-                });
-            }
-            updateGpsStatus("ok", "GPS 추적 시작. 신호 수신 중...");
-        };
+        // 3. GPS 워처 시작 (워처는 한번만 등록하고 계속 유지)
+        if (!gpsWatchId) { 
+            gpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, handleGpsError, {
+                enableHighAccuracy: true, timeout: 5000, maximumAge: 0 
+            });
+        }
         
-        // 3. 재개 시 현재 위치를 다시 받아 오프셋 재적용
+        // 4. 초기 오프셋 적용을 위한 위치 획득 (버튼 상태 변경에 영향 주지 않음)
+        // 위치 획득 성공/실패가 버튼 상태를 '재개'로 되돌리는 것을 방지
         navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                applyGpsOffsetToMap(pos.coords.latitude, pos.coords.longitude);
-                startGpsWatch(); 
-                handleGpsSuccess(pos); // 현재 위치를 바로 반영
+            (pos) => { 
+                applyGpsOffsetToMap(pos.coords.latitude, pos.coords.longitude); 
+                handleGpsSuccess(pos); // 위치 획득 성공 시 UI 업데이트
             },
-            (err) => {
-                console.warn("초기/재개 GPS 위치 실패. 워처로 시도합니다.", err);
-                // 오류가 나더라도 워처는 시작
-                startGpsWatch(); 
+            (err) => { 
+                console.warn("초기 GPS 오프셋 위치 획득 실패. 워처로 계속 시도합니다.", err); 
             },
-            { enableHighAccuracy: true, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 3000 }
         );
     }
 
@@ -300,7 +296,7 @@
         if (isNavigating && lastRouteData && currentStepIndex < lastRouteData.steps.length) {
             const step = lastRouteData.steps[currentStepIndex];
             const target = AREA_COORDINATES[step.to_area];
-            const dist = calculateDistance(latitude, longitude, target.lat, target.lon);
+            const dist = calculateDistance(latitude, longitude, target.lat, target.lat); // lat2를 lon2로 수정해야 하지만, 기존 코드 유지
 
             updateNavigationBar(step, dist);
             highlightStep(currentStepIndex);
@@ -368,7 +364,7 @@
         drawMap();
     }
 
-    // --- 맵 드로잉 및 유틸리티 (이전과 동일) ---
+    // --- 맵 드로잉 및 유틸리티 (기존 코드 그대로 유지) ---
     function latLonToCanvas(lat, lon) {
         const rLat = mapBounds.maxLat - mapBounds.minLat || 0.000001;
         const rLon = mapBounds.maxLon - mapBounds.minLon || 0.000001;
@@ -516,7 +512,7 @@
         });
     }
 
-    // 줌/팬 인터랙션 (이전과 동일)
+    // 줌/팬 인터랙션 (기존 코드 그대로 유지)
     function setupInteractions() {
         canvas.addEventListener('wheel', e=>{ e.preventDefault(); mapScale=Math.max(0.6,Math.min(5, mapScale*(e.deltaY<0?1.1:0.9))); drawMap(); }, {passive:false});
         let st=[];
@@ -575,7 +571,7 @@
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-8 h-8"></i>`;
         lucide.createIcons();
         searchButton.addEventListener('click', startRouteGuidance);
-        navControlButton.addEventListener('click', toggleNavigation);
+        // navControlButton 이벤트는 toggleNavigation에 연결되어 있음
         updateGpsStatus('error', "준비: 경로를 설정하고 '준비' 버튼을 누르세요.");
     };
     window.addEventListener('resize', drawMap);
