@@ -197,7 +197,7 @@
 
     // --- 4. 함수 정의 ---
 
-    // 🌟 지도 비율 계산을 위해 위도/경도 범위 계산
+    // 지도 비율 계산을 위해 위도/경도 범위 계산
     function recalculateMapBounds() {
         mapBounds.minLat = Infinity; mapBounds.maxLat = -Infinity; mapBounds.minLon = Infinity; mapBounds.maxLon = -Infinity;
         AREA_IDS.forEach(id => {
@@ -256,10 +256,13 @@
         else startNavigation();
     }
 
-    // 🌟 실제 GPS 기반 내비게이션 시작
+    // 🌟🌟🌟 내비게이션 시작 함수 수정 (스크롤 방지 추가) 🌟🌟🌟
     function startNavigation() {
         if (!navigator.geolocation) { alert("GPS 권한이 필요합니다."); return; }
 
+        // 스크롤 방지 로직 추가
+        window.scrollTo(0, 0); 
+        
         // 지도 상태 초기화
         mapScale = 1.0;
         mapTranslateX = 0;
@@ -292,6 +295,7 @@
 
         requestAnimationFrame(animateLoop);
     }
+    // -----------------------------------------------------
 
     function stopNavigation() {
         isNavigating = false;
@@ -508,7 +512,7 @@
         return remaining;
     }
 
-    // 🌟🌟🌟 전체 경로 목록 렌더링 함수 수정 (볼드체 제거) 🌟🌟🌟
+    // 전체 경로 목록 렌더링 함수 (볼드체 제거된 버전)
     function renderStepsList(data) {
         if (!data || data.steps.length === 0) {
             routeStepsList.innerHTML = '';
@@ -539,7 +543,6 @@
             }
         }
     }
-    // -----------------------------------------------------
 
     // 하단 내비게이션 바 업데이트 (총거리 통일성 확보)
     function updateNavigationBar(step, totalRemainingDist) {
@@ -592,44 +595,34 @@
         canvas.addEventListener('touchend', ()=>isD=false);
     }
 
-    // 🌟🌟🌟 캔버스 크기 조정 함수 수정 (지도 비율 고정) 🌟🌟🌟
+    // 캔버스 크기 조정 함수 (지도 비율 고정)
     const resizeCanvas = () => {
         const rect = canvas.parentElement.getBoundingClientRect();
         
         const lonRange = mapBounds.maxLon - mapBounds.minLon;
         const latRange = mapBounds.maxLat - mapBounds.minLat;
 
-        // 위도와 경도 차이가 너무 작으면 기본값 사용 (나누기 0 방지)
         if (lonRange === 0 || latRange === 0) {
              canvas.width = rect.width;
              canvas.height = canvas.offsetHeight;
         } else {
-             // 1도는 위도에 따라 미터 길이가 다르지만, 간편화를 위해 이 범위의 비율만 사용
              const aspectRatio = latRange / lonRange; 
              
-             // 캔버스 width는 부모 요소의 width에 맞춥니다.
              canvas.width = rect.width; 
              
-             // 캔버스 height를 width와 위도/경도 범위의 비율에 맞춰 조정하여 비율을 유지
-             // 1:1에 가까운 비율을 원한다면, 실제 경도/위도 비율 (1:1.6~2.0)을 적용해야 합니다.
-             // 임시로 가로(lon) 범위와 세로(lat) 범위의 픽셀 비율을 맞춰 정사각형처럼 보이게 합니다.
-             // 실제 정사각형 모양을 위해 캔버스 높이를 계산
              const calculatedHeight = rect.width * aspectRatio; 
              
-             // 최소 높이 (min-height: 350px)를 보장하면서 계산된 높이를 적용
              canvas.height = Math.max(350, calculatedHeight); 
              
-             // CSS height 스타일도 동기화하여 시각적으로도 늘어지지 않게 합니다.
              canvas.style.height = `${canvas.height}px`;
         }
         
         drawMap();
     };
-    // -------------------------------------------------------------------
 
     window.onload = function() {
         populate(); 
-        recalculateMapBounds(); // 여기서 resizeCanvas가 처음 호출되어 비율을 맞춥니다.
+        recalculateMapBounds();
         setupInteractions(); 
         document.getElementById('current-turn-icon').innerHTML = `<i data-lucide="compass" class="w-7 h-7"></i>`;
         lucide.createIcons();
@@ -637,10 +630,8 @@
         const p = new URLSearchParams(window.location.search);
         if(p.get('start') && AREA_IDS.includes(p.get('start'))) startSelect.value = p.get('start');
         
-        // 창 크기가 변경될 때, 캔버스 크기를 다시 계산하고 지도를 다시 그립니다.
         window.addEventListener('resize', resizeCanvas); 
         
-        // 폰트 및 DOM 로딩을 위한 최종 보정
         setTimeout(resizeCanvas, 100);
     };
     </script>
