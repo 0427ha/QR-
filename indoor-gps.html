@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>공항 실내 GPS 및 QR 내비게이터</title>
+    <title>공항 실내 GPS 및 URL 연동 내비게이터</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <!-- HTML5-QRCode for scanning -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background:#f4f7f9; margin:0; padding:1rem; }
         #map-canvas { width:100%; max-width:900px; height:520px; background:#fff; border:1px solid #ddd; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.1); }
@@ -17,17 +14,6 @@
         #nav-bar.active { transform:translateY(0); }
         .status-ok { background:#d1fae5; color:#065f46; border:1px solid #34d399; }
         .status-err { background:#fee2e2; color:#991b1b; border:1px solid #f87171; }
-        
-        /* QR Modal Styles */
-        .modal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center;
-            align-items: center; z-index: 2000;
-        }
-        .modal-content {
-            background: white; padding: 1.5rem; border-radius: 12px; max-width: 90%;
-            width: 400px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-        }
     </style>
 </head>
 <body>
@@ -41,19 +27,18 @@
             준비 중: 출발지와 도착지를 선택하세요.
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div>
                 <label class="block text-sm font-medium mb-1">출발 구역</label>
                 <select id="start" class="w-full p-3 border rounded-lg"></select>
             </div>
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium mb-1">도착 구역 <span id="qr-hint" class="text-xs text-green-600 font-bold"></span></label>
-                <div class="flex gap-2">
-                    <select id="end" class="w-full p-3 border rounded-lg"></select>
-                    <button id="qr-scan-button" onclick="openQrScanner()" class="p-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition duration-150 shadow-md flex-shrink-0" title="QR 스캔으로 도착지 설정">
-                        <i data-lucide="scan-line" class="w-6 h-6"></i>
-                    </button>
-                </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">
+                    도착 구역 
+                    <span id="qr-hint" class="text-xs text-green-600 font-bold"></span>
+                </label>
+                <!-- QR 스캔 버튼 제거됨. 드롭다운만 남음 -->
+                <select id="end" class="w-full p-3 border rounded-lg"></select>
             </div>
             <div>
                 <button id="find" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">
@@ -78,7 +63,6 @@
             <div id="icon"><i data-lucide="compass" class="w-10 h-10"></i></div>
             <div>
                 <div id="instruction" class="text-xl font-bold">대기 중</div>
-                <!-- 🚨 수정: 총 남은 경로 거리를 표시할 것임 -->
                 <div id="distance" class="text-sm opacity-90">남은 총 경로: -</div>
             </div>
         </div>
@@ -88,18 +72,8 @@
     </div>
 </div>
 
-<!-- QR 스캐너 모달 -->
-<div id="qr-modal" class="modal" onclick="closeQrScanner(event)">
-    <div class="modal-content" onclick="event.stopPropagation()">
-        <h3 class="text-lg font-bold mb-4 text-gray-800">도착지 QR 스캔</h3>
-        <div id="reader" class="w-full"></div>
-        <div id="qr-status" class="text-center mt-3 text-sm text-gray-600">카메라 로딩 중...</div>
-        <button class="mt-4 w-full p-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300" onclick="closeQrScanner()">닫기</button>
-    </div>
-</div>
-
 <script>
-// 데이터
+// 데이터 정의
 const AREAS = {
     A: {name:"국제선 도착", lat:37.510000, lon:127.050000},
     B: {name:"면세품 수령", lat:37.510000, lon:127.051800},
@@ -112,9 +86,7 @@ const AREAS = {
     I: {name:"탑승 게이트", lat:37.507000, lon:127.053600}
 };
 
-// 🚨 EDGES에 거리가 추가되어야 경로 안내 시 단계별 거리를 사용할 수 있습니다.
-// 다익스트라가 거리를 반환하지만, 단계별 거리가 없어서 현재는 '직선 거리'만 사용하고 있습니다.
-// 여기서는 다익스트라가 반환하는 경로 객체에 단계별 거리를 포함하도록 수정하겠습니다.
+// 엣지(연결) 데이터 (양방향을 위해 ALL_EDGES를 생성하는 기본 데이터)
 const EDGES_DATA = [
     {u:"A", v:"B", dist:15, instr:"면세품 수령 방향으로 직진", turn:"arrow-up"},
     {u:"B", v:"C", dist:15, instr:"환전소 방향으로 우회전 후 직진", turn:"corner-down-right"},
@@ -133,18 +105,18 @@ const EDGES_DATA = [
     {u:"B", v:"F", dist:21, instr:"푸드코트 방향으로 우회전", turn:"corner-down-right"},
     {u:"E", v:"C", dist:21, instr:"환전소 방향으로 좌회전", turn:"corner-down-left"}
 ];
-// 양방향 연결 추가
+// 양방향 연결 전체 리스트 (다익스트라용)
 const ALL_EDGES = [];
 EDGES_DATA.forEach(edge => {
     // 순방향 추가
-    ALL_EDGES.push({ from: edge.u, to: edge.v, dist: edge.dist, instruction: edge.instr, turn: edge.turn });
+    ALL_EDGES.push({ from: edge.u, to: edge.v, dist: edge.dist, instruction: edge.instr, icon: edge.turn });
     // 역방향 추가 (간단하게 역방향 설명 생성)
     ALL_EDGES.push({ 
         from: edge.v, 
         to: edge.u, 
         dist: edge.dist, 
         instruction: edge.instr.replace(/방향으로 직진|방향으로 우회전|방향으로 좌회전/g, '방향으로 되돌아감').replace(/이용/g, '이용 후 되돌아감'), 
-        turn: edge.turn // 간단하게 같은 아이콘 사용
+        icon: edge.turn 
     });
 });
 
@@ -152,8 +124,13 @@ EDGES_DATA.forEach(edge => {
 // 전역 변수
 let canvas, ctx, route = null, watching = false, watchId = null;
 let userPos = null, heading = 0, offset = {lat:0, lon:0};
-let scale = 1, tx = 0, ty = 0;
-let html5QrCode = null; // QR 스캐너 인스턴스
+let scale = 1, tx = 0, ty = 0; // 줌/팬 변수
+
+// URL 파라미터를 읽는 함수
+function getUrlParam(name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+}
 
 // DOM 로드 후 초기화
 window.onload = function() {
@@ -170,6 +147,18 @@ window.onload = function() {
     });
     startSel.value = "A"; // 기본값 설정
     endSel.value = "I";
+    
+    // 🚨 URL 파라미터 'dest' 확인 및 도착지 설정
+    const initialDest = getUrlParam('dest');
+    if (initialDest) {
+        const destId = initialDest.toUpperCase().trim();
+        if (AREAS[destId]) {
+            endSel.value = destId;
+            document.getElementById('qr-hint').textContent = `(QR: ${destId}로 도착지 설정됨)`;
+            updateStatus("ok", `QR 스캔: 도착지가 ${AREAS[destId].name}으로 설정되었습니다. 경로 찾기를 누르세요.`);
+        }
+    }
+
 
     // 이벤트
     document.getElementById('find').onclick = findRoute;
@@ -178,7 +167,11 @@ window.onload = function() {
     resizeCanvas();
     draw();
     lucide.createIcons();
-    updateStatus("err", "준비 중: 출발지와 도착지를 선택하세요.");
+    
+    // 유효한 dest 파라미터가 없으면 기본 상태 메시지 유지
+    if (!initialDest || !AREAS[initialDest.toUpperCase().trim()]) {
+        updateStatus("err", "준비 중: 출발지와 도착지를 선택하세요.");
+    }
 };
 
 function resizeCanvas() {
@@ -188,55 +181,6 @@ function resizeCanvas() {
     draw();
 }
 window.addEventListener('resize', resizeCanvas);
-
-// -------------------------
-// QR 스캐너 로직 추가
-// -------------------------
-
-function openQrScanner() {
-    if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader");
-    }
-    
-    document.getElementById('qr-modal').style.display = 'flex';
-    document.getElementById('qr-status').textContent = '카메라 로딩 중...';
-
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-    
-    html5QrCode.start({ facingMode: "environment" }, config, 
-        (decodedText) => {
-            // QR 스캔 성공
-            const targetAreaId = decodedText.trim().toUpperCase();
-            if (AREAS[targetAreaId]) {
-                document.getElementById('end').value = targetAreaId;
-                document.getElementById('qr-status').innerHTML = `<span class="text-green-600 font-bold">도착지 ${AREAS[targetAreaId].name}로 설정됨.</span>`;
-                document.getElementById('qr-hint').textContent = '(QR 설정 완료)';
-                
-                // 🚨 요청 사항 반영: QR 찍었을 때 고정하면 안됨 -> 드롭다운 값만 변경하고 모달은 닫음.
-                closeQrScanner(); 
-            } else {
-                document.getElementById('qr-status').innerHTML = `<span class="text-red-600">유효하지 않은 QR 코드입니다: ${decodedText}</span>`;
-            }
-        },
-        (errorMessage) => {
-            // QR 스캔 진행 중 (오류 아님)
-        }
-    ).catch((err) => {
-        document.getElementById('qr-status').textContent = `카메라 접근 오류: ${err}`;
-        console.error("QR Start Error: ", err);
-    });
-}
-
-function closeQrScanner(event) {
-    const modal = document.getElementById('qr-modal');
-    // 모달 배경 클릭이거나 닫기 버튼을 눌렀을 때만 닫기
-    if (event && event.currentTarget.id === 'qr-modal' && event.target.id !== 'qr-modal') return;
-
-    modal.style.display = 'none';
-    if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().catch(err => console.log("Failed to stop QR scanner:", err));
-    }
-}
 
 // -------------------------
 // 내비게이션 및 경로 로직
@@ -270,8 +214,6 @@ function findRoute() {
     document.getElementById('nav-btn').textContent = "내비 시작";
     document.getElementById('nav-btn').classList.replace('bg-red-500','bg-green-500');
     document.getElementById('nav-bar').classList.add('active');
-    
-    document.getElementById('qr-hint').textContent = '';
     
     updateNavUI(route.steps[0].instruction, route.dist);
     draw();
@@ -364,10 +306,11 @@ function onLocation(pos) {
     // 1. 현재 위치에서 다음 노드까지의 직선 거리 (단계 통과 조건)
     const distToNextNode = haversine(userPos.lat, userPos.lon, target.lat, target.lon); 
     
-    // 2. 🚨 [핵심 수정] 총 남은 경로 거리 계산
-    // 현재 위치부터 다음 노드까지의 직선 거리 (distToNextNode)
-    let totalRemainingDist = distToNextNode;
-    // 다음 노드 이후의 모든 경로 거리 합산
+    // 2. 총 남은 경로 거리 계산
+    // FIX: 현재 단계의 남은 거리를 해당 단계의 정의된 길이(step.dist)로 제한하여, GPS 오차로 인한 총 거리 부풀림을 방지합니다.
+    let currentStepRemaining = Math.min(step.dist, distToNextNode);
+
+    let totalRemainingDist = currentStepRemaining;
     for (let i = route.currentStep + 1; i < route.steps.length; i++) {
         totalRemainingDist += route.steps[i].dist;
     }
@@ -381,12 +324,14 @@ function onLocation(pos) {
         if (route.currentStep >= route.steps.length) {
             arrive();
         } else {
-            // 다음 단계로 넘어갈 때 UI 갱신
+            // 다음 단계로 넘어갈 때 UI 갱신을 위해 거리 재계산
             const nextStep = route.steps[route.currentStep];
             const nextTarget = AREAS[nextStep.to];
             const nextDistToNextNode = haversine(userPos.lat, userPos.lon, nextTarget.lat, nextTarget.lon); 
             
-            let newTotalRemainingDist = nextDistToNextNode;
+            // FIX: 다음 단계로 넘어갈 때도 거리가 부풀려지지 않도록 보정
+            let nextStepRemaining = Math.min(nextStep.dist, nextDistToNextNode);
+            let newTotalRemainingDist = nextStepRemaining;
             for (let i = route.currentStep + 1; i < route.steps.length; i++) {
                 newTotalRemainingDist += route.steps[i].dist;
             }
@@ -439,9 +384,12 @@ function updateNavUI(instruction, totalRemainingDist) {
     document.getElementById('instruction').textContent = instruction;
     document.getElementById('distance').textContent = `남은 총 경로: ${totalRemainingDist.toFixed(0)}m`;
     
-    const step = route.steps[route.currentStep] || route.steps[route.steps.length - 1];
-    document.getElementById('icon').innerHTML = `<i data-lucide="${step.icon}" class="w-10 h-10"></i>`;
-    lucide.createIcons();
+    // 경로가 있을 때만 아이콘 업데이트
+    if (route && route.steps.length > 0) {
+        const step = route.steps[route.currentStep] || route.steps[route.steps.length - 1];
+        document.getElementById('icon').innerHTML = `<i data-lucide="${step.icon}" class="w-10 h-10"></i>`;
+        lucide.createIcons();
+    }
 }
 
 // 다익스트라 (경로 객체에 dist와 instruction 포함하도록 수정)
@@ -449,7 +397,7 @@ function dijkstra(start, end) {
     const graph = {};
     ALL_EDGES.forEach(e => {
         graph[e.from] = graph[e.from] || [];
-        graph[e.from].push({ to: e.to, dist: e.dist, instruction: e.instruction, turn: e.turn });
+        graph[e.from].push({ to: e.to, dist: e.dist, instruction: e.instruction, icon: e.icon });
     });
 
     const dist = {}, prev = {}, q = new Set(Object.keys(AREAS));
@@ -458,6 +406,7 @@ function dijkstra(start, end) {
 
     while (q.size) {
         let min = null;
+        // 가장 거리가 짧은 노드 찾기
         q.forEach(n => { if (dist[n] < dist[min] || min === null) min = n; });
         if (min === end || dist[min] === Infinity) break;
         q.delete(min);
@@ -478,23 +427,24 @@ function dijkstra(start, end) {
     let totalDist = dist[end];
     let u = end;
     
-    while (u) { path.unshift(u); u = prev[u] ? prev[u].node : null; }
+    // 경로 역추적
+    const pathNodes = [];
+    while (u) { pathNodes.unshift(u); u = prev[u] ? prev[u].node : null; }
     
-    // 경로 역추적하며 단계 정보 추출
-    for (let i = 0; i < path.length - 1; i++) {
-        const fromNode = path[i];
-        const toNode = path[i+1];
+    // 단계 정보 추출
+    for (let i = 0; i < pathNodes.length - 1; i++) {
+        const fromNode = pathNodes[i];
+        const toNode = pathNodes[i+1];
         
-        // prev 객체에서 toNode로 오는 데 사용된 엣지 정보를 찾아 단계에 추가합니다.
-        const edgeInfo = graph[fromNode].find(e => e.to === toNode);
-
-        if (edgeInfo) {
-             steps.push({
+        // prev 객체에서 toNode로 오는 데 사용된 엣지 정보를 찾아 단계에 추가
+        // 여기서 prev[toNode].edge를 사용해야 정확함.
+        if (prev[toNode] && prev[toNode].node === fromNode) {
+            steps.push({
                 from: fromNode,
                 to: toNode,
-                dist: edgeInfo.dist, // 단계별 거리 포함
-                instruction: edgeInfo.instruction,
-                icon: edgeInfo.turn
+                dist: prev[toNode].edge.dist, // 단계별 거리 포함
+                instruction: prev[toNode].edge.instruction,
+                icon: prev[toNode].edge.icon
             });
         }
     }
@@ -505,7 +455,7 @@ function dijkstra(start, end) {
         steps[steps.length - 1].instruction = `${AREAS[end].name}에 도착했습니다.`;
     }
 
-    return {path, steps, dist: totalDist, currentStep: 0};
+    return {path: pathNodes, steps, dist: totalDist, currentStep: 0};
 }
 
 // 하버신 거리 (사용자 좌표와 맵 좌표 간의 거리 측정)
@@ -524,7 +474,7 @@ function updateStatus(type, msg) {
     el.className = "p-3 rounded-lg text-sm font-medium mb-4 " + (type==="ok"?"status-ok":"status-err");
 }
 
-// 캔버스 그리기 (맵 크기 및 줌/팬 적용 필요)
+// 캔버스 그리기
 function draw() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -557,19 +507,18 @@ function draw() {
         return {x, y};
     };
 
-    // 1. 모든 연결선
+    // 1. 모든 연결선 (회색 선)
     ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 4 * scale;
-    ALL_EDGES.filter((v,i,a) => a.findIndex(t => t.from === v.to && t.to === v.from) === i) // 중복 제거
-        .forEach(e => {
-        const p1 = latLonToCanvas(AREAS[e.from].lat, AREAS[e.from].lon);
-        const p2 = latLonToCanvas(AREAS[e.to].lat, AREAS[e.to].lon);
+    EDGES_DATA.forEach(e => { // EDGES_DATA를 사용하여 중복 없이 그리기
+        const p1 = latLonToCanvas(AREAS[e.u].lat, AREAS[e.u].lon);
+        const p2 = latLonToCanvas(AREAS[e.v].lat, AREAS[e.v].lon);
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
         ctx.stroke();
     });
 
-    // 2. 경로
+    // 2. 경로 (빨간 선)
     if (route) {
         ctx.strokeStyle = "#ef4444"; ctx.lineWidth = 8 * scale;
         ctx.lineCap = 'round';
@@ -586,9 +535,17 @@ function draw() {
     // 3. 노드
     Object.entries(AREAS).forEach(([id, a]) => {
         const {x, y} = latLonToCanvas(a.lat, a.lon);
-        const isCurrentStep = route && route.currentStep < route.steps.length && (id === route.steps[route.currentStep].to || id === route.steps[route.currentStep].from);
         
-        ctx.fillStyle = isCurrentStep ? "#22c55e" : (route && route.path.includes(id) ? "#3b82f6" : "#94a3b8");
+        // 현재 이동 중인 노드 강조
+        let isCurrentNode = false;
+        if (route && route.currentStep < route.steps.length) {
+            const currentStep = route.steps[route.currentStep];
+            if (id === currentStep.to || id === currentStep.from) {
+                isCurrentNode = true;
+            }
+        }
+        
+        ctx.fillStyle = isCurrentNode ? "#22c55e" : (route && route.path.includes(id) ? "#3b82f6" : "#94a3b8");
         ctx.beginPath(); ctx.arc(x,y,12 * scale,0,Math.PI*2); ctx.fill();
         ctx.strokeStyle = "white"; ctx.lineWidth = 3 * scale; ctx.stroke();
         
@@ -599,7 +556,7 @@ function draw() {
         ctx.fillText(a.name.split(' ')[0], x, y + 18 * scale);
     });
 
-    // 4. 사용자 위치
+    // 4. 사용자 위치 (노란 점)
     if (userPos) {
         const {x, y} = latLonToCanvas(userPos.lat, userPos.lon);
 
@@ -675,9 +632,10 @@ function setupCanvasEvents() {
     canvas.addEventListener('touchend', () => { 
         dragging = false; 
         st = [];
-        if (route && route.currentStep >= route.steps.length) { // 도착 후 재설정 버튼으로 변경
-             document.getElementById('nav-btn').textContent = "재설정";
-             document.getElementById('nav-btn').classList.replace('bg-yellow-500','bg-blue-600');
+        // 내비게이션 버튼 텍스트 복구 로직 (줌/팬 후 상태 복원)
+        if (route && route.currentStep >= route.steps.length) { 
+              document.getElementById('nav-btn').textContent = "재설정";
+              document.getElementById('nav-btn').classList.replace('bg-yellow-500','bg-blue-600');
         } else if (watching) {
             document.getElementById('nav-btn').textContent = "정지";
             document.getElementById('nav-btn').classList.replace('bg-yellow-500','bg-red-500');
