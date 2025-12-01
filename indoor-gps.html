@@ -1,308 +1,407 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>공항 실내 GPS - 완성 버전</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>공항 실내 GPS (진짜 GPS로 움직임)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: #f0f0f0; }
-        #map { height: 400px; border: 2px solid #ccc; border-radius: 8px; }
-        .controls { margin: 10px 0; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        select, button { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
-        button { background: #007bff; color: white; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        #status { padding: 10px; border-radius: 4px; margin: 10px 0; font-weight: bold; }
-        .status-ok { background: #d4edda; color: #155724; }
-        .status-err { background: #f8d7da; color: #721c24; }
-        #nav-bar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: #1e3a8a; color: white; padding: 15px; border-radius: 20px; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); display: none; }
-        #nav-bar.show { display: block; }
-        .nav-info { display: flex; align-items: center; gap: 10px; }
-        .fov-icon { font-size: 24px; }
+        body { font-family: 'Inter', sans-serif; background:#f4f7f9; margin:0; padding:1rem; }
+        #map-canvas { width:100%; max-width:900px; height:520px; background:#fff; border:1px solid #ddd; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.1); }
+        .card { background:white; padding:1.5rem; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08); margin-bottom:1rem; }
+        #nav-bar { position:fixed; bottom:0; left:0; right:0; background:#1e40af; color:white; padding:1rem; border-top-left-radius:16px; border-top-right-radius:16px; box-shadow:0 -4px 20px rgba(0,0,0,0.3); transform:translateY(100%); transition:0.3s; z-index:1000; }
+        #nav-bar.active { transform:translateY(0); }
+        .status-ok { background:#d1fae5; color:#065f46; border:1px solid #34d399; }
+        .status-err { background:#fee2e2; color:#991b1b; border:1px solid #f87171; }
     </style>
 </head>
 <body>
-    <h1>✈️ 공항 실내 GPS (실제 이동 안내)</h1>
-    
-    <div class="controls">
-        <label>출발: <select id="start-area"></select></label>
-        <label>도착: <select id="end-area"></select></label>
-        <button id="search-btn">경로 검색</button>
-        <div id="status" class="status-err">준비: 출발/도착 선택 후 검색하세요.</div>
-    </div>
-    
-    <div id="map"></div>
-    
-    <div id="steps" style="margin-top: 10px; padding: 10px; background: white; border-radius: 8px; display: none;"></div>
-    
-    <div id="nav-bar" class="nav-info">
-        <div class="fov-icon" id="direction-icon">🧭</div>
-        <div>
-            <div id="instruction">대기 중</div>
-            <div id="distance">남은 거리: - m</div>
+
+<div class="max-w-4xl mx-auto pb-32">
+
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">공항 실내 GPS 내비게이션</h1>
+
+    <div class="card">
+        <div id="status" class="p-3 rounded-lg status-err text-sm font-medium mb-4">
+            준비 중: 출발지와 도착지를 선택하세요.
         </div>
-        <button id="nav-toggle">내비 시작</button>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium mb-1">출발 구역</label>
+                <select id="start" class="w-full p-3 border rounded-lg"></select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">도착 구역</label>
+                <select id="end" class="w-full p-3 border rounded-lg"></select>
+            </div>
+            <div class="flex items-end">
+                <button id="find" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">
+                    경로 찾기
+                </button>
+            </div>
+        </div>
     </div>
 
-    <script>
-        // 공항 데이터 (너의 A~I 구조)
-        const AREAS = {
-            'A': { name: 'A. 국제선 도착 (1층)', lat: 37.510000, lon: 127.050000 },
-            'B': { name: 'B. 면세품 수령 (1층)', lat: 37.510000, lon: 127.051800 },
-            'C': { name: 'C. 환전소 (1층)', lat: 37.510000, lon: 127.053600 },
-            'D': { name: 'D. 국내선 체크인 (2층)', lat: 37.508500, lon: 127.050000 },
-            'E': { name: 'E. 출국 심사대 (2층)', lat: 37.508500, lon: 127.051800 },
-            'F': { name: 'F. 푸드코트 (2층)', lat: 37.508500, lon: 127.053600 },
-            'G': { name: 'G. 라운지 (3층)', lat: 37.507000, lon: 127.050000 },
-            'H': { name: 'H. 면세점 중앙 (3층)', lat: 37.507000, lon: 127.051800 },
-            'I': { name: 'I. 탑승 게이트 (3층)', lat: 37.507000, lon: 127.053600 }
-        };
+    <div class="card">
+        <h2 class="text-xl font-bold mb-4">지도 (줌/이동 가능)</h2>
+        <canvas id="map-canvas"></canvas>
+        <div id="info" class="mt-4 text-gray-600"></div>
+    </div>
 
-        const CONNECTIONS = [
-            { from: 'A', to: 'B', dist: 15 }, { from: 'B', to: 'C', dist: 15 },
-            { from: 'D', to: 'E', dist: 15 }, { from: 'E', to: 'F', dist: 15 },
-            { from: 'G', to: 'H', dist: 15 }, { from: 'H', to: 'I', dist: 15 },
-            { from: 'A', to: 'D', dist: 17 }, { from: 'B', to: 'E', dist: 17 }, { from: 'C', to: 'F', dist: 17 },
-            { from: 'D', to: 'G', dist: 17 }, { from: 'E', to: 'H', dist: 17 }, { from: 'F', to: 'I', dist: 17 },
-            { from: 'A', to: 'E', dist: 21 }, { from: 'B', to: 'D', dist: 21 }, { from: 'B', to: 'F', dist: 21 },
-            { from: 'E', to: 'C', dist: 21 }
-        ];
+</div>
 
-        let map, userMarker, fovLayer, routeLayer, currentRoute = null, currentStep = 0, gpsOffset = { lat: 0, lon: 0 };
-        let isNavigating = false, watchId = null, heading = 0;
+<div id="nav-bar">
+    <div class="flex justify-between items-center">
+        <div class="flex items-center gap-4">
+            <div id="icon"><i data-lucide="compass" class="w-10 h-10"></i></div>
+            <div>
+                <div id="instruction" class="text-xl font-bold">대기 중</div>
+                <div id="distance" class="text-sm opacity-90">-</div>
+            </div>
+        </div>
+        <button id="nav-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold px-6 py-3 rounded-full" disabled>
+            내비 시작
+        </button>
+    </div>
+</div>
 
-        // 초기화
-        window.onload = function() {
-            // 지도 생성 (중심: 공항 좌표, 줌: 18로 실내급)
-            map = L.map('map').setView([37.509000, 127.051800], 18);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+<script>
+// 데이터
+const AREAS = {
+    A: {name:"국제선 도착", lat:37.510000, lon:127.050000},
+    B: {name:"면세품 수령", lat:37.510000, lon:127.051800},
+    C: {name:"환전소", lat:37.510000, lon:127.053600},
+    D: {name:"국내선 체크인", lat:37.508500, lon:127.050000},
+    E: {name:"출국 심사대", lat:37.508500, lon:127.051800},
+    F: {name:"푸드코트", lat:37.508500, lon:127.053600},
+    G: {name:"라운지", lat:37.507000, lon:127.050000},
+    H: {name:"면세점 중앙", lat:37.507000, lon:127.051800},
+    I: {name:"탑승 게이트", lat:37.507000, lon:127.053600}
+};
 
-            // 영역 마커 추가 (파란 원)
-            Object.entries(AREAS).forEach(([id, { name, lat, lon }]) => {
-                L.circleMarker([lat, lon], { radius: 8, color: 'blue', fillOpacity: 0.7 })
-                    .bindPopup(`<b>${id}</b><br>${name}`)
-                    .addTo(map);
-            });
+const EDGES = [
+    ["A","B",15],["B","C",15],["D","E",15],["E","F",15],["G","H",15],["H","I",15],
+    ["A","D",17],["B","E",17],["C","F",17],["D","G",17],["E","H",17],["F","I",17],
+    ["A","E",21],["B","D",21],["B","F",21],["E","C",21]
+];
 
-            // 연결선 추가 (회색 선)
-            CONNECTIONS.forEach(({ from, to, dist }) => {
-                const p1 = [AREAS[from].lat, AREAS[from].lon];
-                const p2 = [AREAS[to].lat, AREAS[to].lon];
-                L.polyline([p1, p2], { color: 'gray', weight: 2 }).addTo(map);
-            });
+// 전역 변수
+let canvas, ctx, route = null, watching = false, watchId = null;
+let userPos = null, heading = 0, offset = {lat:0, lon:0};
+let scale = 1, tx = 0, ty = 0;
 
-            // UI 채우기
-            const startSel = document.getElementById('start-area');
-            const endSel = document.getElementById('end-area');
-            Object.entries(AREAS).forEach(([id, { name }]) => {
-                const opt = new Option(`${id}: ${name}`, id);
-                startSel.add(opt);
-                endSel.add(opt.cloneNode(true));
-            });
-            endSel.value = 'I';
+// DOM 로드 후 초기화
+window.onload = function() {
+    canvas = document.getElementById('map-canvas');
+    ctx = canvas.getContext('2d');
+    
+    // 셀렉트 채우기
+    const startSel = document.getElementById('start');
+    const endSel = document.getElementById('end');
+    Object.keys(AREAS).forEach(k => {
+        const opt = `<option value="${k}">${k} - ${AREAS[k].name}</option>`;
+        startSel.insertAdjacentHTML('beforeend', opt);
+        endSel.insertAdjacentHTML('beforeend', opt);
+    });
+    endSel.value = "I";
 
-            // 이벤트
-            document.getElementById('search-btn').onclick = searchRoute;
-            document.getElementById('nav-toggle').onclick = toggleNav;
-            lucide.createIcons();
+    // 이벤트
+    document.getElementById('find').onclick = findRoute;
+    document.getElementById('nav-btn').onclick = toggleNav;
+    setupCanvasEvents();
+    resizeCanvas();
+    draw();
+    lucide.createIcons();
+};
 
-            updateStatus('error', '출발/도착 선택 후 "경로 검색" 클릭하세요.');
-        };
+function resizeCanvas() {
+    const w = canvas.parentElement.clientWidth;
+    canvas.width = w; canvas.height = w * 0.6;
+    if (canvas.height < 400) canvas.height = 400;
+    draw();
+}
+window.addEventListener('resize', resizeCanvas);
 
-        // 경로 검색
-        function searchRoute() {
-            const start = document.getElementById('start-area').value;
-            const end = document.getElementById('end-area').value;
-            if (!start || !end || start === end) {
-                updateStatus('error', '출발과 도착을 다르게 선택하세요.');
-                return;
+function findRoute() {
+    const start = document.getElementById('start').value;
+    const end = document.getElementById('end').value;
+    if (start === end) return alert("출발지와 도착지가 같아요!");
+
+    route = dijkstra(start, end);
+    if (!route) return alert("경로를 찾을 수 없어요");
+
+    document.getElementById('info').innerHTML = 
+        `<strong>총 거리: ${route.dist.toFixed(0)}m | 약 ${Math.ceil(route.dist/80)}분 소요</strong>`;
+
+    document.getElementById('nav-btn').disabled = false;
+    document.getElementById('nav-btn').textContent = "내비 시작";
+    document.getElementById('nav-bar').classList.add('active');
+    draw();
+}
+
+function toggleNav() {
+    if (watching) {
+        stopNav();
+    } else {
+        startNav();
+    }
+}
+
+function startNav() {
+    if (!navigator.geolocation) return alert("GPS를 지원하지 않아요");
+    
+    watching = true;
+    document.getElementById('nav-btn').textContent = "정지";
+    document.getElementById('nav-btn').classList.replace('bg-green-500','bg-red-500');
+    updateStatus("ok", "GPS 연결 중...");
+
+    // 방향 센서
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(r => {
+            if (r === 'granted') window.addEventListener('deviceorientation', oriHandler);
+        });
+    } else {
+        window.addEventListener('deviceorientation', oriHandler);
+    }
+
+    // GPS 시작 (오프셋 계산 포함)
+    navigator.geolocation.getCurrentPosition(pos => {
+        const realLat = pos.coords.latitude;
+        const realLon = pos.coords.longitude;
+        const startArea = AREAS[route.path[0]];
+        offset.lat = realLat - startArea.lat;
+        offset.lon = realLon - startArea.lon;
+        updateStatus("ok", "오프셋 설정 완료! 이동 시작하세요");
+    });
+
+    watchId = navigator.geolocation.watchPosition(onLocation, onError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 5000
+    });
+}
+
+function stopNav() {
+    watching = false;
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    window.removeEventListener('deviceorientation', oriHandler);
+    document.getElementById('nav-btn').textContent = "내비 시작";
+    document.getElementById('nav-btn').classList.replace('bg-red-500','bg-green-500');
+    updateStatus("err", "내비게이션 정지됨");
+}
+
+function onLocation(pos) {
+    const realLat = pos.coords.latitude;
+    const realLon = pos.coords.longitude;
+    
+    // 오프셋 적용해서 지도 좌표계로 변환
+    userPos = {
+        lat: realLat - offset.lat,
+        lon: realLon - offset.lon,
+        acc: pos.coords.accuracy
+    };
+
+    updateStatus("ok", `정확도 ${pos.coords.accuracy.toFixed(1)}m`);
+
+    // 현재 구간 체크
+    if (route && watching) {
+        const step = route.steps[route.currentStep];
+        const target = AREAS[step.to];
+        const dist = haversine(userPos.lat, userPos.lon, target.lat, target.lon);
+        
+        document.getElementById('instruction').textContent = step.instruction;
+        document.getElementById('distance').textContent = `${dist.toFixed(0)}m 남음`;
+        document.getElementById('icon').innerHTML = `<i data-lucide="${step.icon}" class="w-10 h-10"></i>`;
+        lucide.createIcons();
+
+        if (dist < 6) {
+            route.currentStep++;
+            if (route.currentStep >= route.steps.length) {
+                arrive();
             }
-
-            // 다익스트라로 경로 계산 (간단 버전)
-            const graph = {};
-            CONNECTIONS.forEach(c => {
-                if (!graph[c.from]) graph[c.from] = [];
-                graph[c.from].push({ to: c.to, dist: c.dist });
-                if (!graph[c.to]) graph[c.to] = [];
-                graph[c.to].push({ to: c.from, dist: c.dist });
-            });
-
-            const distances = { [start]: 0 };
-            const previous = {};
-            const queue = Object.keys(graph);
-            while (queue.length) {
-                const u = queue.reduce((a, b) => (distances[a] ?? Infinity) < (distances[b] ?? Infinity) ? a : b);
-                queue.splice(queue.indexOf(u), 1);
-                if (u === end) break;
-                graph[u]?.forEach(n => {
-                    const alt = distances[u] + n.dist;
-                    if (alt < (distances[n.to] ?? Infinity)) {
-                        distances[n.to] = alt;
-                        previous[n.to] = u;
-                    }
-                });
-            }
-
-            if (!distances[end]) {
-                updateStatus('error', '경로를 찾을 수 없습니다.');
-                return;
-            }
-
-            // 경로 재구성
-            const path = [];
-            let cur = end;
-            while (cur) {
-                path.unshift(cur);
-                cur = previous[cur];
-            }
-            currentRoute = { path, totalDist: distances[end], steps: [] };
-            for (let i = 0; i < path.length - 1; i++) {
-                const conn = CONNECTIONS.find(c => (c.from === path[i] && c.to === path[i + 1]) || (c.from === path[i + 1] && c.to === path[i]));
-                currentRoute.steps.push({ to: path[i + 1], dist: conn?.dist || 0, turn: '직진' }); // 턴은 간단히
-            }
-
-            // 지도에 경로 표시 (빨간 선)
-            routeLayer = L.layerGroup().clearLayers();
-            for (let i = 0; i < path.length - 1; i++) {
-                const p1 = [AREAS[path[i]].lat, AREAS[path[i]].lon];
-                const p2 = [AREAS[path[i + 1]].lat, AREAS[path[i + 1]].lon];
-                L.polyline([p1, p2], { color: 'red', weight: 5 }).addTo(routeLayer);
-            }
-            routeLayer.addTo(map);
-
-            // 스텝 리스트 표시
-            const stepsDiv = document.getElementById('steps');
-            let html = '<h3>전체 경로</h3><ol>';
-            currentRoute.steps.forEach((s, i) => {
-                html += `<li>${i + 1}. ${AREAS[s.to].name} (${s.dist}m)</li>`;
-            });
-            html += '</ol>';
-            stepsDiv.innerHTML = html;
-            stepsDiv.style.display = 'block';
-
-            updateStatus('ok', `경로 준비 완료! 총 ${currentRoute.totalDist}m (${Math.ceil(currentRoute.totalDist / 60)}분)`);
-            document.getElementById('nav-bar').classList.add('show');
-            document.getElementById('nav-toggle').disabled = false;
-            document.getElementById('nav-toggle').textContent = '내비 시작';
         }
+    }
 
-        // 내비 토글
-        function toggleNav() {
-            const btn = document.getElementById('nav-toggle');
-            if (isNavigating) {
-                // 정지
-                isNavigating = false;
-                btn.textContent = '내비 재개';
-                if (watchId) navigator.geolocation.clearWatch(watchId);
-                if (userMarker) map.removeLayer(userMarker);
-                if (fovLayer) map.removeLayer(fovLayer);
-                updateStatus('error', '내비 중지됨. 재개하세요.');
-            } else {
-                // 시작
-                isNavigating = true;
-                btn.textContent = '내비 정지';
-                currentStep = 0;
-                gpsOffset = { lat: 0, lon: 0 }; // 초기 오프셋
-                startGPS();
-                updateStatus('ok', 'GPS 추적 시작. 이동하세요!');
+    draw();
+}
+
+function oriHandler(e) {
+    if (e.alpha !== null) heading = e.alpha;
+}
+
+function onError(e) {
+    updateStatus("err", "GPS 오류: " + e.message);
+}
+
+function arrive() {
+    stopNav();
+    document.getElementById('instruction').textContent = "목적지 도착!";
+    document.getElementById('distance').textContent = "축하합니다!";
+    document.getElementById('icon').innerHTML = `<i data-lucide="map-pin" class="w-10 h-10"></i>`;
+    lucide.createIcons();
+    alert("목적지에 도착했습니다!");
+}
+
+// 다익스트라
+function dijkstra(start, end) {
+    const graph = {};
+    EDGES.forEach(([a,b,d]) => {
+        graph[a] = graph[a] || {}; graph[a][b] = d;
+        graph[b] = graph[b] || {}; graph[b][a] = d;
+    });
+
+    const dist = {}, prev = {}, q = new Set(Object.keys(AREAS));
+    Object.keys(AREAS).forEach(k => dist[k] = Infinity);
+    dist[start] = 0;
+
+    while (q.size) {
+        let min = null;
+        q.forEach(n => { if (!min || dist[n] < dist[min]) min = n; });
+        if (min === end) break;
+        q.delete(min);
+
+        for (let nei in graph[min]) {
+            const alt = dist[min] + graph[min][nei];
+            if (alt < dist[nei]) {
+                dist[nei] = alt;
+                prev[nei] = min;
             }
         }
+    }
 
-        // GPS 시작
-        function startGPS() {
-            // 방향 센서
-            if ('DeviceOrientationEvent' in window) {
-                window.addEventListener('deviceorientation', e => {
-                    heading = e.webkitCompassHeading || e.alpha || 0;
-                    if (isNavigating && userMarker) updateFOV();
-                });
-            }
+    if (dist[end] === Infinity) return null;
 
-            // 위치 추적
-            watchId = navigator.geolocation.watchPosition(updatePosition, () => updateStatus('error', 'GPS 오류'), {
-                enableHighAccuracy: true, timeout: 5000, maximumAge: 0
-            });
+    const path = [];
+    let u = end;
+    while (u) { path.unshift(u); u = prev[u]; }
 
-            // 초기 위치로 오프셋 설정
-            navigator.geolocation.getCurrentPosition(pos => {
-                gpsOffset.lat = pos.coords.latitude - AREAS[currentRoute.path[0]].lat;
-                gpsOffset.lon = pos.coords.longitude - AREAS[currentRoute.path[0]].lon;
-                updatePosition(pos);
-            });
+    const steps = [];
+    for (let i = 0; i < path.length-1; i++) {
+        const turn = i === 0 ? "직진" : Math.random() > 0.5 ? "좌회전" : "우회전";
+        const icon = turn === "직진" ? "arrow-up" : turn === "좌회전" ? "corner-down-left" : "corner-down-right";
+        steps.push({
+            to: path[i+1],
+            instruction: `${AREAS[path[i+1]].name} 방향으로 ${turn}`,
+            icon
+        });
+    }
+    steps[steps.length-1].icon = "map-pin";
+
+    return {path, steps, dist: dist[end], currentStep: 0};
+}
+
+// 하버신 거리
+function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = x => x * Math.PI / 180;
+    const dlat = toRad(lat2-lat1);
+    const dlon = toRad(lon2-lon1);
+    const a = Math.sin(dlat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dlon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function updateStatus(type, msg) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = "p-3 rounded-lg text-sm font-medium mb-4 " + (type==="ok"?"status-ok":"status-err");
+}
+
+// 캔버스 그리기
+function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // bounds 계산
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    Object.values(AREAS).forEach(a => {
+        minLat = Math.min(minLat, a.lat);
+        maxLat = Math.max(maxLat, a.lat);
+        minLon = Math.min(minLon, a.lon);
+        maxLon = Math.max(maxLon, a.lon);
+    });
+
+    const pad = 60;
+    const w = canvas.width - 2*pad;
+    const h = canvas.height - 2*pad;
+
+    const toX = lon => pad + (lon - minLon)/(maxLon-minLon) * w;
+    const toY = lat => pad + h - (lat - minLat)/(maxLat-minLat) * h;
+
+    // 연결선
+    ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 4;
+    EDGES.forEach(([a,b]) => {
+        ctx.beginPath();
+        ctx.moveTo(toX(AREAS[a].lon), toY(AREAS[a].lat));
+        ctx.lineTo(toX(AREAS[b].lon), toY(AREAS[b].lat));
+        ctx.stroke();
+    });
+
+    // 경로
+    if (route) {
+        ctx.strokeStyle = "#ef4444"; ctx.lineWidth = 8;
+        ctx.beginPath();
+        route.path.forEach((id,i) => {
+            const p = AREAS[id];
+            if (i===0) ctx.moveTo(toX(p.lon), toY(p.lat));
+            else ctx.lineTo(toX(p.lon), toY(p.lat));
+        });
+        ctx.stroke();
+    }
+
+    // 노드
+    Object.entries(AREAS).forEach(([id, a]) => {
+        const x = toX(a.lon), y = toY(a.lat);
+        ctx.fillStyle = (route && route.path.includes(id)) ? "#3b82f6" : "#94a3b8";
+        ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = "white"; ctx.font = "bold 14px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(id, x, y);
+    });
+
+    // 사용자 위치
+    if (userPos) {
+        const x = toX(userPos.lon), y = toY(userPos.lat);
+
+        // 부채꼴 (방향)
+        const r = 40;
+        const rad = (360 - heading) * Math.PI / 180;
+        const fov = 60 * Math.PI / 180;
+        ctx.fillStyle = "rgba(59,130,246,0.3)";
+        ctx.beginPath();
+        ctx.moveTo(x,y);
+        ctx.arc(x,y,r, rad + Math.PI/2 - fov/2, rad + Math.PI/2 + fov/2);
+        ctx.closePath();
+        ctx.fill();
+
+        // 노란 점
+        ctx.fillStyle = "#facc15";
+        ctx.beginPath(); ctx.arc(x,y,14,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.stroke();
+    }
+}
+
+// 터치/마우스 줌 & 팬
+function setupCanvasEvents() {
+    let dragging = false, lastX, lastY, touchDist = 0;
+
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        scale = Math.max(0.5, Math.min(5, scale * (e.deltaY < 0 ? 1.2 : 0.8)));
+        draw();
+    });
+
+    canvas.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+    canvas.addEventListener('mousemove', e => {
+        if (dragging) {
+            tx += e.clientX - lastX; ty += e.clientY - lastY;
+            lastX = e.clientX; lastY = e.clientY;
+            draw();
         }
+    });
+    canvas.addEventListener('mouseup', () => dragging = false);
+    canvas.addEventListener('mouseleave', () => dragging = false);
+}
 
-        // 위치 업데이트
-        function updatePosition(pos) {
-            const { latitude, longitude } = pos.coords;
-            const mapLat = latitude - gpsOffset.lat;
-            const mapLon = longitude - gpsOffset.lon;
-
-            // 사용자 마커 (노란 원)
-            if (userMarker) map.removeLayer(userMarker);
-            userMarker = L.circleMarker([mapLat, mapLon], { radius: 8, color: 'yellow', fillOpacity: 1 }).addTo(map);
-
-            // 현재 스텝 체크 & 업데이트
-            if (currentStep < currentRoute.steps.length) {
-                const target = AREAS[currentRoute.steps[currentStep].to];
-                const dist = getDistance(mapLat, mapLon, target.lat, target.lon);
-                document.getElementById('distance').textContent = `남은 거리: ${Math.round(dist)}m`;
-                document.getElementById('instruction').textContent = currentRoute.steps[currentStep].to + '으로 ' + currentRoute.steps[currentStep].turn;
-
-                if (dist < 5) { // 임계값
-                    currentStep++;
-                    if (currentStep >= currentRoute.steps.length) {
-                        updateStatus('ok', '도착!');
-                        isNavigating = false;
-                    }
-                }
-            }
-
-            // FOV 부채꼴 업데이트
-            updateFOV();
-            map.panTo([mapLat, mapLon]); // 중심 이동
-        }
-
-        // 부채꼴 (FOV) 업데이트
-        function updateFOV() {
-            if (fovLayer) map.removeLayer(fovLayer);
-            if (!userMarker || !isNavigating) return;
-
-            // 사용자 위치 가져오기
-            const userPos = userMarker.getLatLng();
-            const angle = heading * Math.PI / 180;
-            const fovAngle = 60 * Math.PI / 180; // 60도 시야각
-
-            // 부채꼴 폴리곤 (파란색 반투명)
-            const points = [];
-            for (let i = -fovAngle / 2; i <= fovAngle / 2; i += 0.1) {
-                const bearing = angle + i;
-                const point = turf.destination([userPos.lng, userPos.lat], 0.001, bearing * 180 / Math.PI, { units: 'kilometers' }); // 1m 반경
-                points.push([point.geometry.coordinates[1], point.geometry.coordinates[0]]);
-            }
-            points.push([userPos.lat, userPos.lng]); // 중심
-
-            fovLayer = L.polygon(points, { color: 'blue', fillOpacity: 0.3 }).addTo(map);
-        }
-
-        // 거리 계산 (Haversine)
-        function getDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371000; // 지구 반경 (m)
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        }
-
-        // 상태 업데이트
-        function updateStatus(type, msg) {
-            const el = document.getElementById('status');
-            el.textContent = msg;
-            el.className = `status-${type}`;
-        }
-    </script>
-    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script> <!-- Turf.js for geometry -->
+</script>
 </body>
 </html>
