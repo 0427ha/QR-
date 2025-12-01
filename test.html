@@ -338,7 +338,8 @@ function onLocation(pos) {
     updateNavUI(step.instruction, totalRemainingDist);
     
     // 단계 통과 체크 (직선 거리 사용)
-    if (distToNextNode < 8) { // 8m 이내 진입 시 다음 단계로
+    // 🚨 노드 통과 임계값을 8m에서 15m로 높여 이동 속도(경로 진행)를 빠르게 보이도록 수정
+    if (distToNextNode < 15) { // 15m 이내 진입 시 다음 단계로 (사용자 속도 증가 효과)
         route.currentStep++;
         if (route.currentStep >= route.steps.length) {
             arrive();
@@ -584,39 +585,16 @@ function draw() {
         ctx.fillText(a.name.split(' ')[0], x, y + 18 * scale);
     });
 
-    // 4. 사용자 위치 (노란 점) - 부채꼴 제거 및 크기 증대로 움직임 강조
+    // 4. 사용자 위치 (노란 점)
     if (userPos) {
         const {x, y} = latLonToCanvas(userPos.lat, userPos.lon);
-        
-        // 1. 부채꼴 대신 큰 파란색 외곽선/정확도 원을 추가하여 위치를 강조
-        ctx.fillStyle = "rgba(59,130,246,0.2)"; // 투명한 파란색 배경
-        ctx.beginPath(); 
-        ctx.arc(x,y, 25 * scale, 0, Math.PI*2); // 큰 원
-        ctx.fill();
 
-        // 2. 노란 점 (사용자) 크기 키움 (14->18)
+        // 🚨 부채꼴(방향) 코드 제거됨
+        
+        // 노란 점 (사용자)
         ctx.fillStyle = "#facc15";
-        ctx.beginPath(); ctx.arc(x,y,18 * scale,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x,y,14 * scale,0,Math.PI*2); ctx.fill();
         ctx.strokeStyle = "white"; ctx.lineWidth = 4 * scale; ctx.stroke();
-        
-        // 3. 헤딩(방향)을 나타내는 작은 삼각형 (부채꼴 대신) 추가
-        const dirSize = 8 * scale;
-        const rad = (360 - heading) * Math.PI / 180;
-        
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(rad);
-        ctx.fillStyle = "#1e40af"; // 진한 파란색
-        ctx.beginPath();
-        // 삼각형 꼭짓점 (앞쪽)
-        ctx.moveTo(0, -18 * scale); 
-        // 왼쪽 밑변
-        ctx.lineTo(-dirSize, 0); 
-        // 오른쪽 밑변
-        ctx.lineTo(dirSize, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
     }
 }
 
@@ -678,8 +656,8 @@ function setupCanvasEvents() {
         st = [];
         // 내비게이션 버튼 텍스트 복구 로직 (줌/팬 후 상태 복원)
         if (route && route.currentStep >= route.steps.length) { 
-              document.getElementById('nav-btn').textContent = "재설정";
-              document.getElementById('nav-btn').classList.replace('bg-yellow-500','bg-blue-600');
+             document.getElementById('nav-btn').textContent = "재설정";
+             document.getElementById('nav-btn').classList.replace('bg-yellow-500','bg-blue-600');
         } else if (watching) {
             document.getElementById('nav-btn').textContent = "정지";
             document.getElementById('nav-btn').classList.replace('bg-yellow-500','bg-red-500');
