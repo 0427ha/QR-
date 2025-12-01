@@ -31,13 +31,15 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div>
-                <label class="block text-sm font-medium mb-1">출발 구역</label>
+                <label class="block text-sm font-medium mb-1">
+                    출발 구역
+                    <span id="qr-hint" class="text-xs text-green-600 font-bold"></span>
+                </label>
                 <select id="start" class="w-full p-3 border rounded-lg"></select>
             </div>
             <div>
                 <label class="block text-sm font-medium mb-1">
                     도착 구역 
-                    <span id="qr-hint" class="text-xs text-green-600 font-bold"></span>
                 </label>
                 <select id="end" class="w-full p-3 border rounded-lg"></select>
             </div>
@@ -156,17 +158,17 @@ window.onload = function() {
     startSel.value = "A"; // 기본값 설정
     endSel.value = "I";
     
-    // 🚨 URL 파라미터 'area' 확인 및 도착지 설정 (기존 'dest'에서 'area'로 수정됨)
-    const initialDest = getUrlParam('area'); // 'area' 파라미터 사용
-    let isValidInitialDest = false;
+    // 🚨 URL 파라미터 'area' 확인 및 출발지 설정 (도착지 대신 출발지로 변경)
+    const initialStart = getUrlParam('area'); // 'area' 파라미터 사용
+    let isValidInitialStart = false;
     
-    if (initialDest) {
-        const destId = initialDest.toUpperCase().trim();
-        if (AREAS[destId]) {
-            endSel.value = destId;
-            document.getElementById('qr-hint').textContent = `(URL: ${destId}로 도착지 설정됨)`;
-            updateStatus("ok", `URL 파라미터: 도착지가 ${AREAS[destId].name}으로 설정되었습니다. 경로 찾기를 누르세요.`);
-            isValidInitialDest = true;
+    if (initialStart) {
+        const startId = initialStart.toUpperCase().trim();
+        if (AREAS[startId]) {
+            startSel.value = startId; // 👈 출발지로 설정
+            document.getElementById('qr-hint').textContent = `(URL: ${startId}로 출발지 설정됨)`;
+            updateStatus("ok", `URL 파라미터: 출발지가 ${AREAS[startId].name}으로 설정되었습니다. 도착지를 선택하고 경로 찾기를 누르세요.`);
+            isValidInitialStart = true;
         }
     }
 
@@ -180,7 +182,7 @@ window.onload = function() {
     lucide.createIcons();
     
     // 유효한 area 파라미터가 없으면 기본 상태 메시지 유지
-    if (!isValidInitialDest) {
+    if (!isValidInitialStart) {
         updateStatus("err", "준비 중: 출발지와 도착지를 선택하세요.");
     }
 };
@@ -566,7 +568,7 @@ function draw() {
         let isCurrentNode = false;
         if (route && route.currentStep < route.steps.length) {
             const currentStep = route.steps[route.currentStep];
-            if (id === currentStep.to || id === currentStep.from) {
+            if (id === currentStep.to || id === route.path[0]) { // 출발 노드도 강조
                 isCurrentNode = true;
             }
         }
