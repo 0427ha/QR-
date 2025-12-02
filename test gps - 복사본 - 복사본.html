@@ -3,83 +3,133 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-    <title>Indoor PDR Nav</title>
+    <title>Square Grid Indoor Nav</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
-    body { background: #000; color: white; margin:0; overflow: hidden; touch-action: none; font-family: sans-serif; }
+    body { background: #000; color: white; margin:0; overflow: hidden; touch-action: none; font-family: -apple-system, sans-serif; }
     #map-canvas { width:100%; height:65vh; background:#111; border-radius:0 0 30px 30px; }
-    .overlay { position: absolute; top: 20px; width: 100%; text-align: center; z-index: 10; pointer-events: none; }
-    .bottom-panel { position: absolute; bottom: 0; width: 100%; height: 35vh; background: #000; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
-    .btn { background: #3b82f6; color: white; border:none; padding: 20px; font-size: 1.2rem; font-weight: bold; border-radius: 15px; width: 100%; margin-top: auto; }
-    .step-counter { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; color: #aaa; }
+    
+    /* 상단 정보창 */
+    .overlay { 
+        position: absolute; top: 20px; left:0; right:0; 
+        text-align: center; z-index: 10; pointer-events: none; 
+    }
+    
+    /* 하단 컨트롤 패널 */
+    .bottom-panel { 
+        position: absolute; bottom: 0; left:0; right:0; 
+        height: 35vh; background: #000; 
+        padding: 20px; box-sizing: border-box; 
+        display: flex; flex-direction: column; 
+        border-top: 1px solid #333;
+    }
+    
+    /* 버튼 스타일 */
+    .btn { 
+        background: linear-gradient(135deg, #3b82f6, #2563eb); 
+        color: white; border:none; padding: 18px; 
+        font-size: 1.3rem; font-weight: 800; 
+        border-radius: 20px; width: 100%; 
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        margin-top: auto; 
+    }
+    .btn:active { transform: scale(0.98); }
+
+    .step-badge {
+        position: absolute; top: 20px; right: 20px;
+        background: rgba(30, 41, 59, 0.8); border: 1px solid #334155;
+        padding: 6px 12px; border-radius: 99px; font-size: 0.8rem; font-weight: bold; color: #94a3b8;
+    }
     </style>
 </head>
 <body>
 
-<div class="step-counter">걸음 수: <span id="step-count">0</span></div>
+<div class="step-badge">👣 <span id="step-count">0</span> steps</div>
 
 <div class="overlay">
-    <div id="instr" class="text-3xl font-black text-cyan-400 drop-shadow-md">출발지 선택</div>
-    <div id="dist" class="text-xl text-gray-400 mt-1"></div>
+    <div id="instr" class="text-3xl font-black text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">대기 중</div>
+    <div id="dist" class="text-xl text-gray-400 mt-1 font-mono"></div>
 </div>
 
 <canvas id="map-canvas"></canvas>
 
 <div class="bottom-panel">
-    <div class="text-gray-500 text-sm text-center mb-4">
-        실내 모드: 폰을 들고 <b>제자리 걸음</b>을 해보세요.<br>
-        (가속도 센서로 걸음을 감지합니다)
+    <div class="flex gap-3 mb-4">
+        <div class="flex-1">
+            <label class="text-xs text-gray-500 ml-1">출발</label>
+            <select id="start" class="w-full bg-gray-800 text-white p-4 rounded-xl font-bold border border-gray-700 outline-none"></select>
+        </div>
+        <div class="flex-1">
+            <label class="text-xs text-gray-500 ml-1">도착</label>
+            <select id="end" class="w-full bg-gray-800 text-white p-4 rounded-xl font-bold border border-gray-700 outline-none"></select>
+        </div>
     </div>
-    <div class="flex gap-2 mb-4">
-        <select id="start" class="bg-gray-800 text-white p-3 rounded-lg flex-1"></select>
-        <select id="end" class="bg-gray-800 text-white p-3 rounded-lg flex-1"></select>
+    
+    <div class="text-center text-gray-500 text-xs mb-4 leading-relaxed">
+        ⚠️ <b>제자리 걸음</b>을 하면 이동합니다.<br>
+        폰을 들고 몸을 돌려 방향을 맞추세요.
     </div>
+
     <button id="btn" class="btn">내비 시작</button>
 </div>
 
 <script>
-// --- 설정: 1걸음당 이동 거리 (단위: 위경도) ---
-// 실내 지도 스케일 (작게 설정)
-const STEP_LENGTH = 0.000015; // 약 1.5m
-const BASE_LAT = 37.0; const BASE_LON = 127.0;
-const GAP = 0.00005; // 구역 간격
+// --- [설정] 맵 크기 및 거리감 조절 ---
+const STEP_LENGTH = 0.000018; // 한 걸음당 이동 거리 (약간 키움)
+const GAP = 0.00008; // 구역 간격 (기존보다 2배 넓힘 -> 거리감 증가)
+const BASE_LAT = 37.0; 
+const BASE_LON = 127.0;
 
+// 3x3 격자 맵 (총 9개 구역)
 const AREAS = {
-    A: {name:"체크인 카운터", lat:BASE_LAT, lon:BASE_LON},
-    B: {name:"보안 검색대", lat:BASE_LAT + GAP, lon:BASE_LON},
-    C: {name:"면세점 입구", lat:BASE_LAT + GAP*2, lon:BASE_LON},
-    D: {name:"탑승 게이트", lat:BASE_LAT + GAP*2, lon:BASE_LON + GAP},
-    E: {name:"항공기 탑승", lat:BASE_LAT + GAP*2, lon:BASE_LON + GAP*2}
+    // 첫번째 줄
+    A: {name:"입국장(Gate 1)", lat:BASE_LAT, lon:BASE_LON},
+    B: {name:"로밍 센터", lat:BASE_LAT, lon:BASE_LON + GAP},
+    C: {name:"환전소", lat:BASE_LAT, lon:BASE_LON + GAP*2},
+    // 두번째 줄
+    D: {name:"면세점 중앙", lat:BASE_LAT - GAP, lon:BASE_LON},
+    E: {name:"푸드코트", lat:BASE_LAT - GAP, lon:BASE_LON + GAP},
+    F: {name:"탑승동 셔틀", lat:BASE_LAT - GAP, lon:BASE_LON + GAP*2},
+    // 세번째 줄
+    G: {name:"화장실", lat:BASE_LAT - GAP*2, lon:BASE_LON},
+    H: {name:"키즈존", lat:BASE_LAT - GAP*2, lon:BASE_LON + GAP},
+    I: {name:"VIP 라운지", lat:BASE_LAT - GAP*2, lon:BASE_LON + GAP*2}
 };
 
+// 연결 정보 (격자 형태 연결)
 const EDGES = [
-    {u:"A", v:"B"}, {u:"B", v:"C"}, {u:"C", v:"D"}, {u:"D", v:"E"}
+    ['A','B'], ['B','C'], // 1열 가로
+    ['D','E'], ['E','F'], // 2열 가로
+    ['G','H'], ['H','I'], // 3열 가로
+    ['A','D'], ['D','G'], // 1행 세로
+    ['B','E'], ['E','H'], // 2행 세로
+    ['C','F'], ['F','I']  // 3행 세로
 ];
 
-// --- 변수 ---
-let userPos = null; // 현재 내 위치
-let heading = 0;    // 폰이 보는 방향 (0~360)
+// --- 시스템 변수 ---
+let userPos = null; 
+let heading = 0;    
 let currentStepCount = 0;
 let isNavigating = false;
-let route = [];
+let path = []; // 계산된 최단 경로
 let canvas, ctx;
 
-// 가속도 센서 관련
-let lastAcc = {x:0, y:0, z:0};
+// 가속도 센서 필터 변수
 let lastStepTime = 0;
 
 window.onload = () => {
     canvas = document.getElementById('map-canvas');
     ctx = canvas.getContext('2d');
     
+    // Select Box 채우기
     const s = document.getElementById('start');
     const e = document.getElementById('end');
     Object.keys(AREAS).forEach(k => {
-        const opt = `<option value="${k}">${AREAS[k].name}</option>`;
+        const opt = `<option value="${k}">[${k}] ${AREAS[k].name}</option>`;
         s.innerHTML += opt; e.innerHTML += opt;
     });
-    s.value = "A"; e.value = "E";
+    s.value = "A"; e.value = "I"; // 대각선 끝으로 기본 설정
 
     document.getElementById('btn').onclick = startNav;
     window.addEventListener('resize', resize);
@@ -93,54 +143,54 @@ function resize() {
 }
 
 function startNav() {
-    // 권한 요청 (iOS 13+ 대응)
-    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-        DeviceMotionEvent.requestPermission().then(response => {
-            if (response == 'granted') initSensors();
+    // iOS 권한 요청
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        DeviceMotionEvent.requestPermission().then(res => {
+            if (res === 'granted') initSensors();
         }).catch(console.error);
     } else {
         initSensors();
     }
 
-    const startKey = document.getElementById('start').value;
-    const endKey = document.getElementById('end').value;
+    const startNode = document.getElementById('start').value;
+    const endNode = document.getElementById('end').value;
     
-    // 단순 경로 생성 (A->B->C...)
-    route = Object.keys(AREAS).filter(k => k >= startKey && k <= endKey);
-    if(startKey > endKey) route = route.reverse();
+    if(startNode === endNode) return alert("출발지와 도착지가 같습니다.");
 
-    userPos = {...AREAS[startKey]}; // 시작 위치로 점프
+    // 길찾기 (BFS)
+    path = findShortestPath(startNode, endNode);
+    if(!path) return alert("경로를 찾을 수 없습니다.");
+
+    userPos = {...AREAS[startNode]}; // 출발지로 이동
     isNavigating = true;
     currentStepCount = 0;
     
-    document.getElementById('btn').innerText = "재설정";
-    document.getElementById('btn').onclick = () => location.reload();
-    document.getElementById('instr').innerText = "이동 시작";
+    const btn = document.getElementById('btn');
+    btn.innerText = "안내 종료";
+    btn.onclick = () => location.reload();
+    btn.style.background = "#ef4444"; // 빨간색 변경
+    
+    updateStatus();
 }
 
 function initSensors() {
-    // 1. 나침반 (방향)
+    // 1. 방향 (나침반)
     window.addEventListener('deviceorientation', e => {
         if(e.webkitCompassHeading) heading = e.webkitCompassHeading;
         else if(e.alpha) heading = 360 - e.alpha;
     });
 
-    // 2. 가속도 (걸음 감지 - Pedometer)
+    // 2. 걸음 감지 (가속도)
     window.addEventListener('devicemotion', e => {
         if(!isNavigating) return;
-        
         const acc = e.accelerationIncludingGravity;
         if(!acc) return;
 
-        // 중력 가속도 제거를 위한 간단한 필터
-        // 걸을 때 발생하는 상하 흔들림(Z축 or Total Magnitude) 감지
         const total = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
-        
-        // 임계값 11.0 (중력 9.8보다 조금 큼) - 폰을 들고 걸을 때 튀는 값
-        // 너무 민감하면 값을 올리세요 (12.0 ~ 13.0)
-        if (total > 11.5) { 
+        // 걸음 감도: 11.2 (너무 민감하면 12.0으로 올리세요)
+        if (total > 11.2) { 
             const now = Date.now();
-            if (now - lastStepTime > 400) { // 0.4초 내 중복 감지 방지
+            if (now - lastStepTime > 450) { // 0.45초 딜레이 (따닥 방지)
                 takeStep();
                 lastStepTime = now;
             }
@@ -148,47 +198,94 @@ function initSensors() {
     });
 }
 
-// --- 핵심: 한 걸음 이동 ---
+// 한 걸음 전진 로직
 function takeStep() {
     currentStepCount++;
     document.getElementById('step-count').innerText = currentStepCount;
     
-    // heading(각도) 방향으로 좌표 이동
-    // 위도(y): cos, 경도(x): sin
+    // heading 방향으로 좌표 이동
     const rad = (heading * Math.PI) / 180;
-    
-    // 북쪽이 0도라 가정하고 좌표계에 맞춤 (지도 상 북쪽 = Lat 증가)
-    // 실제로는 좌표계 변환이 복잡하지만, 여기선 단순화
-    // heading 0도(북) -> y감소? 화면상 위쪽이 북쪽이면 lat 증가
-    // 스마트폰 나침반: 0=북, 90=동, 180=남, 270=서
-    
-    // lat(위도)는 y축 방향, lon(경도)는 x축 방향
+    // 지도상에서 북쪽(Lat증가)을 0도로 가정
     userPos.lat += Math.cos(rad) * STEP_LENGTH; 
     userPos.lon += Math.sin(rad) * STEP_LENGTH;
 
-    checkArrival();
+    updateStatus();
 }
 
-function checkArrival() {
-    const targetKey = route[route.length-1];
-    const target = AREAS[targetKey];
-    
-    // 거리 계산
-    const dLat = (userPos.lat - target.lat);
-    const dLon = (userPos.lon - target.lon);
-    const dist = Math.sqrt(dLat*dLat + dLon*dLon) / 0.00001; // 대략 m 환산
+function updateStatus() {
+    if(!path || path.length === 0) return;
 
-    document.getElementById('dist').innerText = `목적지까지 ${dist.toFixed(0)}m`;
-    
-    if(dist < 5) {
+    // 현재 목표 지점 찾기
+    // 경로상의 노드들 중 가장 가까운 노드를 찾고, 그 다음 노드를 안내
+    let minDist = Infinity;
+    let nearestIdx = -1;
+
+    path.forEach((node, i) => {
+        const d = getDist(userPos, AREAS[node]);
+        if(d < minDist) { minDist = d; nearestIdx = i; }
+    });
+
+    // 도착 판정 (마지막 노드와 5m 이내)
+    const endNode = AREAS[path[path.length-1]];
+    const distToEnd = getDist(userPos, endNode);
+
+    if (distToEnd < 5) {
         document.getElementById('instr').innerText = "도착 완료! 🎉";
+        document.getElementById('dist').innerText = "안내를 종료합니다.";
         isNavigating = false;
+        return;
     }
+
+    // 다음 목표 안내
+    let targetIdx = nearestIdx + 1;
+    if (targetIdx >= path.length) targetIdx = path.length - 1;
+    
+    const targetNode = AREAS[path[targetIdx]];
+    document.getElementById('instr').innerHTML = `<span class="text-white">${targetNode.name}</span> 방향`;
+    document.getElementById('dist').innerText = `남은 거리 약 ${distToEnd.toFixed(0)}m`;
 }
 
-// --- 그리기 루프 ---
+// 간단한 BFS 최단경로 알고리즘
+function findShortestPath(start, end) {
+    const adj = {};
+    EDGES.forEach(([u, v]) => {
+        if(!adj[u]) adj[u] = []; if(!adj[v]) adj[v] = [];
+        adj[u].push(v); adj[v].push(u);
+    });
+
+    let queue = [[start]];
+    let visited = new Set([start]);
+
+    while(queue.length > 0) {
+        let path = queue.shift();
+        let node = path[path.length-1];
+        
+        if(node === end) return path;
+
+        if(adj[node]) {
+            for(let neighbor of adj[node]) {
+                if(!visited.has(neighbor)) {
+                    visited.add(neighbor);
+                    queue.push([...path, neighbor]);
+                }
+            }
+        }
+    }
+    return null;
+}
+
+// 거리 계산 (미터 단위 근사치)
+function getDist(pos1, pos2) {
+    const dLat = pos1.lat - pos2.lat;
+    const dLon = pos1.lon - pos2.lon;
+    // 위도 1도 = 약 111km -> 미터 환산 보정
+    return Math.sqrt(dLat*dLat + dLon*dLon) / 0.000009; 
+}
+
+// --- 렌더링 (Canvas) ---
 function animate() {
-    ctx.fillStyle = "black";
+    // 배경
+    ctx.fillStyle = "#000";
     ctx.fillRect(0,0,canvas.width, canvas.height);
 
     if(!userPos) {
@@ -196,48 +293,93 @@ function animate() {
         return;
     }
 
-    const SCALE = 3000000;
+    // 맵 스케일 (화면에 다 들어오게 조정)
+    const SCALE = 1800000; 
     const cx = canvas.width/2; 
-    const cy = canvas.height * 0.6;
+    const cy = canvas.height * 0.65; // 내 위치는 약간 아래
 
-    // 변환 함수 (내 위치가 항상 중앙)
+    // 좌표 변환 (내 위치가 항상 중앙, 내가 보는 방향이 항상 위(UP))
     const toScreen = (lat, lon) => {
-        let dy = (lat - userPos.lat) * SCALE;
-        let dx = (lon - userPos.lon) * SCALE;
+        let dy = (lat - userPos.lat) * SCALE; // 북쪽이 +y
+        let dx = (lon - userPos.lon) * SCALE; // 동쪽이 +x
         
-        // 화면 회전 (내가 보는 방향이 항상 위쪽)
+        // 회전 변환 (User Heading 반대로 맵을 회전)
         const rad = -heading * Math.PI / 180;
-        const rx = dx * Math.cos(rad) - (-dy) * Math.sin(rad);
-        const ry = dx * Math.sin(rad) + (-dy) * Math.cos(rad);
+        const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
+        const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
         
-        return {x: cx + rx, y: cy + ry}; // y축 반전 없음 (단순화)
+        // Canvas 좌표계는 y가 아래로 증가하므로 -ry 적용
+        return {x: cx + rx, y: cy - ry}; 
     };
 
-    // 경로 그리기
+    // 1. 전체 그리드 선 그리기 (회색)
     ctx.strokeStyle = "#333";
-    ctx.lineWidth = 20;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    Object.keys(AREAS).forEach((k, i) => {
-        const p = toScreen(AREAS[k].lat, AREAS[k].lon);
-        if(i==0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    EDGES.forEach(([u, v]) => {
+        const p1 = toScreen(AREAS[u].lat, AREAS[u].lon);
+        const p2 = toScreen(AREAS[v].lat, AREAS[v].lon);
+        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
     });
     ctx.stroke();
-    
-    // 노드
+
+    // 2. 경로 하이라이트 (파란색)
+    if (path && path.length > 0) {
+        ctx.strokeStyle = "rgba(0, 255, 255, 0.4)";
+        ctx.lineWidth = 20;
+        ctx.beginPath();
+        for(let i=0; i<path.length-1; i++) {
+            const p1 = toScreen(AREAS[path[i]].lat, AREAS[path[i]].lon);
+            const p2 = toScreen(AREAS[path[i+1]].lat, AREAS[path[i+1]].lon);
+            ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+        }
+        ctx.stroke();
+    }
+
+    // 3. 노드 그리기
     Object.keys(AREAS).forEach(k => {
         const p = toScreen(AREAS[k].lat, AREAS[k].lon);
-        ctx.fillStyle = "#555";
-        ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = "#fff"; ctx.textAlign="center"; 
-        ctx.fillText(AREAS[k].name, p.x, p.y-15);
+        
+        // 목적지 강조
+        const isDest = (path && path[path.length-1] === k);
+        
+        ctx.fillStyle = isDest ? "#ef4444" : "#1e293b";
+        ctx.beginPath(); ctx.arc(p.x, p.y, isDest? 12 : 8, 0, Math.PI*2); ctx.fill();
+        
+        ctx.fillStyle = isDest ? "#fca5a5" : "#94a3b8";
+        ctx.font = isDest ? "bold 16px sans-serif" : "12px sans-serif";
+        ctx.textAlign="center"; 
+        ctx.fillText(AREAS[k].name, p.x, p.y-18);
     });
 
-    // 내 화살표 (중앙 고정)
+    // 4. 내 화살표 + 부채꼴 (항상 화면 중앙 고정)
     ctx.save();
     ctx.translate(cx, cy);
-    // 맵을 돌렸으므로 화살표는 고정
-    ctx.fillStyle = "#00ffff";
-    ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(-10,10); ctx.lineTo(0,5); ctx.lineTo(10,10); ctx.fill();
+    
+    // (1) 시야각 부채꼴 (FOV) - 노란색
+    // 맵은 돌렸지만 화살표는 고정이므로, 부채꼴도 고정 (위쪽 방향)
+    const gradient = ctx.createRadialGradient(0,0, 10, 0,0, 120);
+    gradient.addColorStop(0, "rgba(255, 220, 0, 0.3)"); // 안쪽 진한 노랑
+    gradient.addColorStop(1, "rgba(255, 220, 0, 0)");   // 바깥쪽 투명
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    // -90도가 위쪽(12시)방향. 좌우 30도씩(PI/6) 부채꼴
+    ctx.arc(0, 0, 120, -Math.PI/2 - 0.5, -Math.PI/2 + 0.5); 
+    ctx.fill();
+
+    // (2) 화살표 본체
+    ctx.fillStyle = "#fff";
+    ctx.shadowBlur = 10; ctx.shadowColor="white";
+    ctx.beginPath(); 
+    ctx.moveTo(0,-18); // 머리
+    ctx.lineTo(-12,12); // 왼쪽 날개
+    ctx.lineTo(0,8);    // 오목
+    ctx.lineTo(12,12);  // 오른쪽 날개
+    ctx.fill();
+    
     ctx.restore();
 
     requestAnimationFrame(animate);
