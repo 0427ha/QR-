@@ -3,30 +3,33 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-    <title>Perfect Indoor Nav</title>
+    <title>Map Preview Nav</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
     body { background: #000; color: white; margin:0; overflow: hidden; touch-action: none; font-family: -apple-system, sans-serif; }
-    #map-canvas { width:100%; height:55vh; background:#111; border-radius:0 0 30px 30px; }
+    
+    #map-canvas { width:100%; height:70vh; background:#111; border-radius:0 0 30px 30px; }
+    
     .overlay { position: absolute; top: 20px; left:0; right:0; text-align: center; z-index: 10; pointer-events: none; }
     
     .bottom-panel { 
-        position: absolute; bottom: 0; left:0; right:0; height: 45vh; 
+        position: absolute; bottom: 0; left:0; right:0; height: 30vh; 
         background: #000; padding: 15px; display: flex; flex-direction: column; 
-        border-top: 1px solid #333;
+        border-top: 1px solid #333; z-index: 20;
     }
     
     .btn-start { 
-        background: #3b82f6; color: white; border:none; padding: 15px; 
-        font-size: 1.2rem; font-weight: 800; border-radius: 15px; width: 100%; 
+        background: #3b82f6; color: white; border:none; padding: 12px; 
+        font-size: 1.1rem; font-weight: 800; border-radius: 12px; width: 100%; 
         box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); margin-top: auto; 
+        transition: all 0.2s;
     }
+    .btn-start.active { background: #ef4444; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
 
-    /* 설정 버튼 그룹 */
-    .calib-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .calib-row { display: flex; gap: 8px; margin-bottom: 8px; }
     .calib-btn {
-        flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444;
-        background: #222; color: #ccc; font-size: 0.8rem; font-weight: bold;
+        flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #444;
+        background: #222; color: #ccc; font-size: 0.75rem; font-weight: bold;
     }
     .calib-btn.active { background: #059669; color: white; border-color: #059669; }
 
@@ -42,26 +45,25 @@
 <div class="step-badge">👣 <span id="step-count">0</span></div>
 
 <div class="overlay">
-    <div id="instr" class="text-3xl font-black text-cyan-400 drop-shadow-md">대기 중</div>
+    <div id="instr" class="text-3xl font-black text-cyan-400 drop-shadow-md">경로 미리보기</div>
     <div id="dist" class="text-xl text-gray-400 mt-1 font-mono"></div>
 </div>
 
 <canvas id="map-canvas"></canvas>
 
 <div class="bottom-panel">
-    <div class="text-xs text-gray-500 mb-1 ml-1">설정 (안 맞으면 눌러보세요)</div>
     <div class="calib-row">
         <button id="btn-rot" class="calib-btn">🔄 지도 회전 반전</button>
         <button id="btn-move" class="calib-btn">⬆️ 이동 방향 반전</button>
     </div>
 
     <div class="flex gap-2 mb-2">
-        <select id="start" class="bg-gray-800 text-white p-3 rounded-xl flex-1 font-bold border border-gray-700"></select>
-        <select id="end" class="bg-gray-800 text-white p-3 rounded-xl flex-1 font-bold border border-gray-700"></select>
+        <select id="start" onchange="updatePreview()" class="bg-gray-800 text-white p-2 rounded-lg flex-1 font-bold border border-gray-700 text-sm"></select>
+        <select id="end" onchange="updatePreview()" class="bg-gray-800 text-white p-2 rounded-lg flex-1 font-bold border border-gray-700 text-sm"></select>
     </div>
     
-    <div class="text-center text-gray-500 text-xs mb-2">
-        손 흔들기 ❌ / <b>실제로 걸으세요</b> ⭕
+    <div class="text-center text-gray-500 text-[10px] mb-1">
+        내비 시작 전에는 <b>북쪽 고정</b> 프리뷰 모드입니다.
     </div>
 
     <button id="btn" class="btn-start">내비 시작</button>
@@ -94,16 +96,15 @@ const EDGES = [
 let userPos = null; 
 let heading = 0;    
 let currentStepCount = 0;
-let isNavigating = false;
+let isNavigating = false; // 현재 내비 중인지 여부
 let path = []; 
 let canvas, ctx;
-
-// [보정 변수]
-let rotDir = -1;  // 지도 회전 방향 (1 or -1)
-let moveDir = 1;  // 이동 전진/후진 (1 or -1)
-
-// 필터링
+let rotDir = -1;  
+let moveDir = 1;  
 let lastStepTime = 0;
+
+// 프리뷰용 카메라 위치
+let cameraCenter = { lat: BASE_LAT, lon: BASE_LON };
 
 window.onload = () => {
     canvas = document.getElementById('map-canvas');
@@ -117,48 +118,76 @@ window.onload = () => {
     });
     s.value = "A"; e.value = "I";
 
-    document.getElementById('btn').onclick = startNav;
+    document.getElementById('btn').onclick = toggleNav;
     
-    // [버튼 이벤트]
     const btnRot = document.getElementById('btn-rot');
     const btnMove = document.getElementById('btn-move');
-
-    btnRot.onclick = () => {
-        rotDir *= -1;
-        btnRot.classList.toggle('active');
-    };
-    btnMove.onclick = () => {
-        moveDir *= -1;
-        btnMove.classList.toggle('active');
-    };
+    btnRot.onclick = () => { rotDir *= -1; btnRot.classList.toggle('active'); };
+    btnMove.onclick = () => { moveDir *= -1; btnMove.classList.toggle('active'); };
 
     window.addEventListener('resize', resize);
     resize();
+    
+    // [핵심] 로딩 시 바로 프리뷰 실행
+    updatePreview(); 
     animate();
 };
 
 function resize() {
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight * 0.55;
+    canvas.height = window.innerHeight * 0.70;
 }
 
-function startNav() {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        DeviceMotionEvent.requestPermission().then(res => { if (res === 'granted') initSensors(); });
-    } else {
-        initSensors();
-    }
+// [기능 추가] 경로 미리보기 업데이트 함수
+function updatePreview() {
     const startNode = document.getElementById('start').value;
     const endNode = document.getElementById('end').value;
-    path = findShortestPath(startNode, endNode);
-    if(!path) return alert("경로 없음");
-    userPos = {...AREAS[startNode]}; 
-    isNavigating = true;
-    currentStepCount = 0;
     
-    const btn = document.getElementById('btn');
-    btn.innerText = "종료 / 재설정"; btn.style.background = "#ef4444";
-    btn.onclick = () => location.reload();
+    // 경로 계산
+    path = findShortestPath(startNode, endNode);
+    
+    // 유저 위치를 출발지로 설정 (센서 작동은 안함)
+    userPos = {...AREAS[startNode]}; 
+    
+    if (path) {
+        // 프리뷰 카메라 위치: 출발지와 도착지의 중간 지점
+        const sP = AREAS[startNode];
+        const eP = AREAS[endNode];
+        cameraCenter = {
+            lat: (sP.lat + eP.lat) / 2,
+            lon: (sP.lon + eP.lon) / 2
+        };
+        
+        if(!isNavigating) {
+            document.getElementById('instr').innerText = "경로 미리보기";
+            const dist = getDist(sP, eP); // 직선거리 대략 표시
+            document.getElementById('dist').innerText = `예상 거리 약 ${dist.toFixed(0)}m`;
+        }
+    }
+}
+
+function toggleNav() {
+    if (isNavigating) {
+        // 내비 종료 -> 프리뷰 모드로 복귀
+        isNavigating = false;
+        document.getElementById('btn').innerText = "내비 시작";
+        document.getElementById('btn').classList.remove('active');
+        document.getElementById('instr').innerText = "안내 종료";
+        location.reload(); // 깔끔하게 리셋
+    } else {
+        // 내비 시작
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission().then(res => { if (res === 'granted') initSensors(); });
+        } else {
+            initSensors();
+        }
+        
+        isNavigating = true;
+        currentStepCount = 0;
+        document.getElementById('btn').innerText = "안내 종료";
+        document.getElementById('btn').classList.add('active');
+        updateStatus(); // 안내 문구 갱신
+    }
 }
 
 function initSensors() {
@@ -168,12 +197,10 @@ function initSensors() {
     });
 
     window.addEventListener('devicemotion', e => {
-        if(!isNavigating) return;
+        if(!isNavigating) return; // 내비 중일 때만 걸음 감지
         const acc = e.accelerationIncludingGravity;
         if(!acc) return;
         const total = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
-        
-        // 걸음 감지 (강도 12.5 이상, 간격 0.45초 이상)
         if (total > 12.5) { 
             const now = Date.now();
             if (now - lastStepTime > 450) { 
@@ -186,15 +213,9 @@ function initSensors() {
 function takeStep() {
     currentStepCount++;
     document.getElementById('step-count').innerText = currentStepCount;
-
-    // [핵심 수정] 이동 계산에 moveDir 반영
-    // 회전값(heading)을 기반으로 하되, moveDir가 -1이면 반대 방향으로 이동
     const rad = (heading * Math.PI) / 180;
-    
-    // moveDir = 1 (전진), -1 (후진)
     userPos.lat += moveDir * Math.cos(rad) * STEP_LENGTH; 
     userPos.lon += moveDir * Math.sin(rad) * STEP_LENGTH;
-    
     updateStatus();
 }
 
@@ -211,6 +232,8 @@ function updateStatus() {
         document.getElementById('instr').innerText = "도착 완료!";
         document.getElementById('dist').innerText = "";
         isNavigating = false;
+        document.getElementById('btn').innerText = "내비 시작";
+        document.getElementById('btn').classList.remove('active');
         return;
     }
     let targetIdx = nearestIdx + 1;
@@ -248,25 +271,32 @@ function getDist(p1, p2) {
 
 function animate() {
     ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width, canvas.height);
+    
+    // userPos가 없으면(로딩 전) 무시, 하지만 updatePreview에서 바로 초기화됨
     if(!userPos) { requestAnimationFrame(animate); return; }
 
-    const SCALE = 1800000; 
+    const SCALE = 2200000; 
     const cx = canvas.width/2; 
-    const cy = canvas.height * 0.65; 
+    const cy = canvas.height * 0.55; 
+
+    // [핵심] 카메라 뷰 설정
+    // 내비 중일 때: 내 위치(userPos) 중심 + 회전(heading) 적용
+    // 프리뷰 일 때: 경로 중간(cameraCenter) 중심 + 회전 없음(0)
+    const centerPos = isNavigating ? userPos : cameraCenter;
+    const currentRot = isNavigating ? (rotDir * heading) : 0; 
 
     const toScreen = (lat, lon) => {
-        let dy = (lat - userPos.lat) * SCALE; 
-        let dx = (lon - userPos.lon) * SCALE; 
+        let dy = (lat - centerPos.lat) * SCALE; 
+        let dx = (lon - centerPos.lon) * SCALE; 
         
-        // [회전 반영] rotDir 적용
-        const rad = rotDir * heading * Math.PI / 180;
+        const rad = currentRot * Math.PI / 180;
         
         const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
         const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
         return {x: cx + rx, y: cy - ry}; 
     };
 
-    // 격자
+    // 격자 그리기
     ctx.strokeStyle = "#333"; ctx.lineWidth = 4; ctx.beginPath();
     EDGES.forEach(([u, v]) => {
         const p1 = toScreen(AREAS[u].lat, AREAS[u].lon);
@@ -275,9 +305,9 @@ function animate() {
     });
     ctx.stroke();
 
-    // 경로
+    // 경로 그리기
     if (path && path.length > 0) {
-        ctx.strokeStyle = "rgba(0, 255, 255, 0.4)"; ctx.lineWidth = 20; ctx.beginPath();
+        ctx.strokeStyle = "rgba(0, 255, 255, 0.5)"; ctx.lineWidth = 25; ctx.beginPath();
         for(let i=0; i<path.length-1; i++) {
             const p1 = toScreen(AREAS[path[i]].lat, AREAS[path[i]].lon);
             const p2 = toScreen(AREAS[path[i+1]].lat, AREAS[path[i+1]].lon);
@@ -286,26 +316,37 @@ function animate() {
         ctx.stroke();
     }
 
-    // 노드
+    // 노드 그리기
     Object.keys(AREAS).forEach(k => {
         const p = toScreen(AREAS[k].lat, AREAS[k].lon);
         const isDest = (path && path[path.length-1] === k);
-        ctx.fillStyle = isDest ? "#ef4444" : "#1e293b";
-        ctx.beginPath(); ctx.arc(p.x, p.y, isDest?12:8, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = isDest ? "#fca5a5" : "#64748b";
-        ctx.font = isDest ? "bold 16px sans-serif" : "12px sans-serif";
-        ctx.textAlign="center"; ctx.fillText(AREAS[k].name, p.x, p.y-18);
+        const isStart = (path && path[0] === k);
+        
+        ctx.fillStyle = isDest ? "#ef4444" : (isStart ? "#10b981" : "#1e293b");
+        ctx.beginPath(); ctx.arc(p.x, p.y, (isDest||isStart)?12:8, 0, Math.PI*2); ctx.fill();
+        
+        ctx.fillStyle = (isDest||isStart) ? "#fff" : "#64748b";
+        ctx.font = (isDest||isStart) ? "bold 16px sans-serif" : "12px sans-serif";
+        ctx.textAlign="center"; ctx.fillText(AREAS[k].name, p.x, p.y-20);
     });
 
-    // 내 화살표
-    ctx.save(); ctx.translate(cx, cy);
-    const grad = ctx.createRadialGradient(0,0, 10, 0,0, 120);
-    grad.addColorStop(0, "rgba(255, 220, 0, 0.3)"); grad.addColorStop(1, "rgba(255, 220, 0, 0)");
-    ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(0,0);
-    ctx.arc(0, 0, 120, -Math.PI/2 - 0.5, -Math.PI/2 + 0.5); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.shadowBlur = 10; ctx.shadowColor="white";
-    ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(-12,12); ctx.lineTo(0,8); ctx.lineTo(12,12); ctx.fill();
-    ctx.restore();
+    // 내 화살표 (내비 중에만 표시, 프리뷰 때는 출발지에 작은 점만)
+    if(isNavigating) {
+        ctx.save(); ctx.translate(cx, cy);
+        const grad = ctx.createRadialGradient(0,0, 10, 0,0, 120);
+        grad.addColorStop(0, "rgba(255, 220, 0, 0.3)"); grad.addColorStop(1, "rgba(255, 220, 0, 0)");
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(0,0);
+        ctx.arc(0, 0, 120, -Math.PI/2 - 0.5, -Math.PI/2 + 0.5); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.shadowBlur = 10; ctx.shadowColor="white";
+        ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(-12,12); ctx.lineTo(0,8); ctx.lineTo(12,12); ctx.fill();
+        ctx.restore();
+    } else {
+        // 프리뷰 모드일 때 현재 내 위치(출발지) 표시
+        const p = toScreen(userPos.lat, userPos.lon);
+        ctx.fillStyle = "#00ffff"; 
+        ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "cyan"; ctx.font="12px sans-serif"; ctx.fillText("출발", p.x, p.y+20);
+    }
 
     requestAnimationFrame(animate);
 }
