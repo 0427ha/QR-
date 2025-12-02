@@ -3,31 +3,37 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-    <title>Walk Only Nav</title>
+    <title>Perfect Indoor Nav</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
     body { background: #000; color: white; margin:0; overflow: hidden; touch-action: none; font-family: -apple-system, sans-serif; }
-    #map-canvas { width:100%; height:60vh; background:#111; border-radius:0 0 30px 30px; }
+    #map-canvas { width:100%; height:55vh; background:#111; border-radius:0 0 30px 30px; }
     .overlay { position: absolute; top: 20px; left:0; right:0; text-align: center; z-index: 10; pointer-events: none; }
+    
     .bottom-panel { 
-        position: absolute; bottom: 0; left:0; right:0; height: 40vh; 
-        background: #000; padding: 20px; display: flex; flex-direction: column; 
+        position: absolute; bottom: 0; left:0; right:0; height: 45vh; 
+        background: #000; padding: 15px; display: flex; flex-direction: column; 
         border-top: 1px solid #333;
     }
-    .btn { 
+    
+    .btn-start { 
         background: #3b82f6; color: white; border:none; padding: 15px; 
         font-size: 1.2rem; font-weight: 800; border-radius: 15px; width: 100%; 
         box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); margin-top: auto; 
     }
+
+    /* 설정 버튼 그룹 */
+    .calib-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .calib-btn {
+        flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444;
+        background: #222; color: #ccc; font-size: 0.8rem; font-weight: bold;
+    }
+    .calib-btn.active { background: #059669; color: white; border-color: #059669; }
+
     .step-badge {
         position: absolute; top: 20px; right: 20px;
         background: rgba(30, 41, 59, 0.8); border: 1px solid #334155;
         padding: 6px 12px; border-radius: 99px; font-size: 0.8rem; font-weight: bold; color: #94a3b8;
-    }
-    .toggle-btn {
-        background: #333; color: #fff; padding: 10px; border-radius: 10px;
-        font-size: 0.9rem; border: 1px solid #555; margin-bottom: 10px;
-        width: 100%; font-weight: bold;
     }
     </style>
 </head>
@@ -43,7 +49,11 @@
 <canvas id="map-canvas"></canvas>
 
 <div class="bottom-panel">
-    <button id="invert-btn" class="toggle-btn">🔄 지도 회전 반대로 (방향 안 맞을 때)</button>
+    <div class="text-xs text-gray-500 mb-1 ml-1">설정 (안 맞으면 눌러보세요)</div>
+    <div class="calib-row">
+        <button id="btn-rot" class="calib-btn">🔄 지도 회전 반전</button>
+        <button id="btn-move" class="calib-btn">⬆️ 이동 방향 반전</button>
+    </div>
 
     <div class="flex gap-2 mb-2">
         <select id="start" class="bg-gray-800 text-white p-3 rounded-xl flex-1 font-bold border border-gray-700"></select>
@@ -51,19 +61,17 @@
     </div>
     
     <div class="text-center text-gray-500 text-xs mb-2">
-        손으로 흔들면 안 움직입니다.<br>
-        <b>실제로 쿵쿵 걸어야</b> 인식됩니다. (리듬감 유지)
+        손 흔들기 ❌ / <b>실제로 걸으세요</b> ⭕
     </div>
 
-    <button id="btn" class="btn">내비 시작</button>
+    <button id="btn" class="btn-start">내비 시작</button>
 </div>
 
 <script>
 // --- 설정 ---
-const STEP_LENGTH = 0.000020; // 보폭 조금 더 키움 (시원하게 가도록)
+const STEP_LENGTH = 0.000020; 
 const GAP = 0.00008; 
-const BASE_LAT = 37.0; 
-const BASE_LON = 127.0;
+const BASE_LAT = 37.0; const BASE_LON = 127.0;
 
 const AREAS = {
     A: {name:"A 구역", lat:BASE_LAT, lon:BASE_LON},
@@ -89,11 +97,13 @@ let currentStepCount = 0;
 let isNavigating = false;
 let path = []; 
 let canvas, ctx;
-let rotationDir = -1; 
 
-// [필터링 변수]
+// [보정 변수]
+let rotDir = -1;  // 지도 회전 방향 (1 or -1)
+let moveDir = 1;  // 이동 전진/후진 (1 or -1)
+
+// 필터링
 let lastStepTime = 0;
-let accelHistory = []; // 이동평균용
 
 window.onload = () => {
     canvas = document.getElementById('map-canvas');
@@ -108,9 +118,18 @@ window.onload = () => {
     s.value = "A"; e.value = "I";
 
     document.getElementById('btn').onclick = startNav;
-    document.getElementById('invert-btn').onclick = () => {
-        rotationDir *= -1; 
-        alert("회전 방향이 변경되었습니다.");
+    
+    // [버튼 이벤트]
+    const btnRot = document.getElementById('btn-rot');
+    const btnMove = document.getElementById('btn-move');
+
+    btnRot.onclick = () => {
+        rotDir *= -1;
+        btnRot.classList.toggle('active');
+    };
+    btnMove.onclick = () => {
+        moveDir *= -1;
+        btnMove.classList.toggle('active');
     };
 
     window.addEventListener('resize', resize);
@@ -120,7 +139,7 @@ window.onload = () => {
 
 function resize() {
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight * 0.60;
+    canvas.height = window.innerHeight * 0.55;
 }
 
 function startNav() {
@@ -138,7 +157,7 @@ function startNav() {
     currentStepCount = 0;
     
     const btn = document.getElementById('btn');
-    btn.innerText = "종료"; btn.style.background = "#ef4444";
+    btn.innerText = "종료 / 재설정"; btn.style.background = "#ef4444";
     btn.onclick = () => location.reload();
 }
 
@@ -152,28 +171,13 @@ function initSensors() {
         if(!isNavigating) return;
         const acc = e.accelerationIncludingGravity;
         if(!acc) return;
-
-        // 3축 벡터 합 (충격량)
         const total = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
         
-        // [수정된 걸음 감지 로직]
-        // 1. 강도 필터: 임계값을 12.5로 상향 (일반적인 중력가속도는 9.8)
-        //    -> 손을 살살 흔드는 건 무시하고 '쿵' 딛는 충격만 잡음
-        const THRESHOLD = 12.5; 
-        
-        // 2. 시간 필터: 
-        //    사람이 1초에 2~3걸음(0.4초 간격) 이상 걷기 힘듦.
-        //    0.3초 이내에 연속 신호가 오면 '빠른 흔들기'로 간주하고 무시.
-        const MIN_STEP_DELAY = 450; // 0.45초 (약간 여유있게 잡음)
-
-        if (total > THRESHOLD) { 
+        // 걸음 감지 (강도 12.5 이상, 간격 0.45초 이상)
+        if (total > 12.5) { 
             const now = Date.now();
-            const timeDiff = now - lastStepTime;
-
-            // 너무 빠르지 않게(손흔들기 방지) & 너무 느리지 않게(중복 방지)
-            if (timeDiff > MIN_STEP_DELAY) { 
-                takeStep();
-                lastStepTime = now;
+            if (now - lastStepTime > 450) { 
+                takeStep(); lastStepTime = now;
             }
         }
     });
@@ -182,9 +186,15 @@ function initSensors() {
 function takeStep() {
     currentStepCount++;
     document.getElementById('step-count').innerText = currentStepCount;
+
+    // [핵심 수정] 이동 계산에 moveDir 반영
+    // 회전값(heading)을 기반으로 하되, moveDir가 -1이면 반대 방향으로 이동
     const rad = (heading * Math.PI) / 180;
-    userPos.lat += Math.cos(rad) * STEP_LENGTH; 
-    userPos.lon += Math.sin(rad) * STEP_LENGTH;
+    
+    // moveDir = 1 (전진), -1 (후진)
+    userPos.lat += moveDir * Math.cos(rad) * STEP_LENGTH; 
+    userPos.lon += moveDir * Math.sin(rad) * STEP_LENGTH;
+    
     updateStatus();
 }
 
@@ -247,7 +257,10 @@ function animate() {
     const toScreen = (lat, lon) => {
         let dy = (lat - userPos.lat) * SCALE; 
         let dx = (lon - userPos.lon) * SCALE; 
-        const rad = rotationDir * heading * Math.PI / 180;
+        
+        // [회전 반영] rotDir 적용
+        const rad = rotDir * heading * Math.PI / 180;
+        
         const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
         const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
         return {x: cx + rx, y: cy - ry}; 
