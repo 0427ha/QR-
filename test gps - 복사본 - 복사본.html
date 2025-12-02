@@ -3,142 +3,88 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-    <title>Tesla FSD - Outdoor Scale</title>
+    <title>Indoor PDR Nav</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
-    body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background: #000; color: white; margin:0; 
-        overflow: hidden; touch-action: none;
-    }
-    #map-canvas {
-        width:100%; height:65vh;
-        background:#111; border-radius:0 0 30px 30px;
-        box-shadow: 0 10px 40px rgba(0,255,255,0.1);
-    }
-    .fsd-overlay {
-        position: absolute; top: 20px; left: 0; right: 0;
-        text-align: center; pointer-events: none; z-index: 10;
-    }
-    .bottom-panel {
-        position: absolute; bottom: 0; left: 0; right: 0;
-        height: 35vh; background: #000;
-        border-top: 1px solid #333;
-        padding: 20px;
-        display: flex; flex-direction: column; justify-content: space-between;
-    }
-    .btn-main {
-        background: #3b82f6; color: white;
-        font-weight: 900; font-size: 1.5rem;
-        width: 100%; padding: 20px;
-        border-radius: 20px; border: none;
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
-        transition: transform 0.1s;
-    }
-    .btn-main:active { transform: scale(0.96); }
-    .btn-stop { background: #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
-    
-    /* 디버그용 */
-    #debug {
-        position: fixed; top: 10px; right: 10px;
-        font-size: 10px; color: #666; pointer-events: none; text-align: right;
-    }
+    body { background: #000; color: white; margin:0; overflow: hidden; touch-action: none; font-family: sans-serif; }
+    #map-canvas { width:100%; height:65vh; background:#111; border-radius:0 0 30px 30px; }
+    .overlay { position: absolute; top: 20px; width: 100%; text-align: center; z-index: 10; pointer-events: none; }
+    .bottom-panel { position: absolute; bottom: 0; width: 100%; height: 35vh; background: #000; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
+    .btn { background: #3b82f6; color: white; border:none; padding: 20px; font-size: 1.2rem; font-weight: bold; border-radius: 15px; width: 100%; margin-top: auto; }
+    .step-counter { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; color: #aaa; }
     </style>
 </head>
 <body>
 
-<div id="debug">GPS Ready</div>
+<div class="step-counter">걸음 수: <span id="step-count">0</span></div>
 
-<div class="fsd-overlay">
-    <div id="instruction" class="text-3xl font-black text-cyan-400 drop-shadow-md">대기 중</div>
-    <div id="distance" class="text-xl text-gray-400 mt-1 font-mono"></div>
+<div class="overlay">
+    <div id="instr" class="text-3xl font-black text-cyan-400 drop-shadow-md">출발지 선택</div>
+    <div id="dist" class="text-xl text-gray-400 mt-1"></div>
 </div>
 
 <canvas id="map-canvas"></canvas>
 
 <div class="bottom-panel">
-    <div class="flex gap-2 mb-2">
-        <select id="start" class="bg-gray-900 text-white p-4 rounded-xl flex-1 border border-gray-700 font-bold text-lg"></select>
-        <select id="end" class="bg-gray-900 text-white p-4 rounded-xl flex-1 border border-gray-700 font-bold text-lg"></select>
+    <div class="text-gray-500 text-sm text-center mb-4">
+        실내 모드: 폰을 들고 <b>제자리 걸음</b>을 해보세요.<br>
+        (가속도 센서로 걸음을 감지합니다)
     </div>
-    
-    <div id="status-msg" class="text-center text-gray-500 text-sm mb-2">
-        야외(주차장/공원) 권장 - GPS 모드
+    <div class="flex gap-2 mb-4">
+        <select id="start" class="bg-gray-800 text-white p-3 rounded-lg flex-1"></select>
+        <select id="end" class="bg-gray-800 text-white p-3 rounded-lg flex-1"></select>
     </div>
-
-    <button id="nav-btn" class="btn-main">내비 시작</button>
+    <button id="btn" class="btn">내비 시작</button>
 </div>
 
 <script>
-// ==========================================
-// 1. 맵 데이터 (스케일: 주차장/공원 규모)
-// ==========================================
-// 0.00025도 ≈ 약 25~30m (GPS 오차를 감당할 수 있는 최소 크기)
-const GAP = 0.00025; 
-const BASE_LAT = 37.0; 
-const BASE_LON = 127.0;
+// --- 설정: 1걸음당 이동 거리 (단위: 위경도) ---
+// 실내 지도 스케일 (작게 설정)
+const STEP_LENGTH = 0.000015; // 약 1.5m
+const BASE_LAT = 37.0; const BASE_LON = 127.0;
+const GAP = 0.00005; // 구역 간격
 
 const AREAS = {
-    A: {name:"주차장 입구", lat:BASE_LAT, lon:BASE_LON},
-    B: {name:"전기차 충전소", lat:BASE_LAT + GAP, lon:BASE_LON},
-    C: {name:"편의점 앞", lat:BASE_LAT + GAP*2, lon:BASE_LON},
-    D: {name:"놀이터", lat:BASE_LAT + GAP*2, lon:BASE_LON + GAP},
-    E: {name:"벤치", lat:BASE_LAT + GAP*2, lon:BASE_LON + GAP*2},
-    F: {name:"관리사무소", lat:BASE_LAT, lon:BASE_LON + GAP*2}
+    A: {name:"체크인 카운터", lat:BASE_LAT, lon:BASE_LON},
+    B: {name:"보안 검색대", lat:BASE_LAT + GAP, lon:BASE_LON},
+    C: {name:"면세점 입구", lat:BASE_LAT + GAP*2, lon:BASE_LON},
+    D: {name:"탑승 게이트", lat:BASE_LAT + GAP*2, lon:BASE_LON + GAP},
+    E: {name:"항공기 탑승", lat:BASE_LAT + GAP*2, lon:BASE_LON + GAP*2}
 };
 
-// 가상의 도로 연결 정보
 const EDGES = [
-    {u:"A", v:"B", dist:25}, {u:"B", v:"C", dist:25},
-    {u:"C", v:"D", dist:25}, {u:"D", v:"E", dist:25},
-    {u:"D", v:"F", dist:30}, {u:"A", v:"F", dist:50}
+    {u:"A", v:"B"}, {u:"B", v:"C"}, {u:"C", v:"D"}, {u:"D", v:"E"}
 ];
 
-// ==========================================
-// 2. 시스템 변수
-// ==========================================
+// --- 변수 ---
+let userPos = null; // 현재 내 위치
+let heading = 0;    // 폰이 보는 방향 (0~360)
+let currentStepCount = 0;
+let isNavigating = false;
+let route = [];
 let canvas, ctx;
-let route = null;
-let watching = false;
-let watchId = null;
 
-// 위치/방향 관련 (스무딩 적용)
-let rawPos = null;      // 실제 GPS 수신값
-let currentPos = null;  // 화면에 그려지는 부드러운 위치 (Lerp 적용)
-let startOffset = {lat: 0, lon: 0}; // 초기 위치 보정용
+// 가속도 센서 관련
+let lastAcc = {x:0, y:0, z:0};
+let lastStepTime = 0;
 
-let targetHeading = 0;  // 나침반 센서값
-let currentHeading = 0; // 화면 회전값
-
-// 스케일 (화면 줌 레벨)
-const MAP_SCALE = 600000; // 25m가 화면에 적절히 보이도록 조정
-
-// ==========================================
-// 3. 초기화 및 이벤트
-// ==========================================
 window.onload = () => {
     canvas = document.getElementById('map-canvas');
     ctx = canvas.getContext('2d');
     
-    // Select Box 세팅
-    const startSel = document.getElementById('start');
-    const endSel = document.getElementById('end');
+    const s = document.getElementById('start');
+    const e = document.getElementById('end');
     Object.keys(AREAS).forEach(k => {
         const opt = `<option value="${k}">${AREAS[k].name}</option>`;
-        startSel.insertAdjacentHTML('beforeend', opt);
-        endSel.insertAdjacentHTML('beforeend', opt);
+        s.innerHTML += opt; e.innerHTML += opt;
     });
-    startSel.value = "A"; endSel.value = "E";
+    s.value = "A"; e.value = "E";
 
-    document.getElementById('nav-btn').onclick = toggleNav;
-    
-    resize();
+    document.getElementById('btn').onclick = startNav;
     window.addEventListener('resize', resize);
-    lucide.createIcons();
-
-    // 애니메이션 루프 시작
-    requestAnimationFrame(animate);
+    resize();
+    animate();
 };
 
 function resize() {
@@ -146,291 +92,155 @@ function resize() {
     canvas.height = window.innerHeight * 0.65;
 }
 
-// ==========================================
-// 4. 내비게이션 로직 (GPS + 스무딩)
-// ==========================================
-function toggleNav() {
-    if(watching) stopNav(); else startNav();
-}
-
 function startNav() {
-    if (!navigator.geolocation) return alert("GPS를 사용할 수 없습니다.");
-
-    const s = document.getElementById('start').value;
-    const e = document.getElementById('end').value;
-    if(s === e) return alert("출발/도착이 같습니다.");
-
-    const path = findPath(s, e);
-    if(!path) return alert("경로를 찾을 수 없습니다.");
-    route = path;
-
-    // UI 변경
-    const btn = document.getElementById('nav-btn');
-    btn.textContent = "안내 종료";
-    btn.className = "btn-main btn-stop";
-    watching = true;
-    
-    // 나침반 권한 (iOS 대응 포함)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission()
-            .then(res => { if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation); })
-            .catch(console.error);
+    // 권한 요청 (iOS 13+ 대응)
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        DeviceMotionEvent.requestPermission().then(response => {
+            if (response == 'granted') initSensors();
+        }).catch(console.error);
     } else {
-        window.addEventListener('deviceorientation', handleOrientation);
+        initSensors();
     }
 
-    // GPS 시작
-    navigator.geolocation.getCurrentPosition(initPosition, onError, { enableHighAccuracy: true });
-    watchId = navigator.geolocation.watchPosition(updatePosition, onError, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 5000
+    const startKey = document.getElementById('start').value;
+    const endKey = document.getElementById('end').value;
+    
+    // 단순 경로 생성 (A->B->C...)
+    route = Object.keys(AREAS).filter(k => k >= startKey && k <= endKey);
+    if(startKey > endKey) route = route.reverse();
+
+    userPos = {...AREAS[startKey]}; // 시작 위치로 점프
+    isNavigating = true;
+    currentStepCount = 0;
+    
+    document.getElementById('btn').innerText = "재설정";
+    document.getElementById('btn').onclick = () => location.reload();
+    document.getElementById('instr').innerText = "이동 시작";
+}
+
+function initSensors() {
+    // 1. 나침반 (방향)
+    window.addEventListener('deviceorientation', e => {
+        if(e.webkitCompassHeading) heading = e.webkitCompassHeading;
+        else if(e.alpha) heading = 360 - e.alpha;
+    });
+
+    // 2. 가속도 (걸음 감지 - Pedometer)
+    window.addEventListener('devicemotion', e => {
+        if(!isNavigating) return;
+        
+        const acc = e.accelerationIncludingGravity;
+        if(!acc) return;
+
+        // 중력 가속도 제거를 위한 간단한 필터
+        // 걸을 때 발생하는 상하 흔들림(Z축 or Total Magnitude) 감지
+        const total = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+        
+        // 임계값 11.0 (중력 9.8보다 조금 큼) - 폰을 들고 걸을 때 튀는 값
+        // 너무 민감하면 값을 올리세요 (12.0 ~ 13.0)
+        if (total > 11.5) { 
+            const now = Date.now();
+            if (now - lastStepTime > 400) { // 0.4초 내 중복 감지 방지
+                takeStep();
+                lastStepTime = now;
+            }
+        }
     });
 }
 
-function stopNav() {
-    watching = false;
-    navigator.geolocation.clearWatch(watchId);
-    window.removeEventListener('deviceorientation', handleOrientation);
+// --- 핵심: 한 걸음 이동 ---
+function takeStep() {
+    currentStepCount++;
+    document.getElementById('step-count').innerText = currentStepCount;
     
-    const btn = document.getElementById('nav-btn');
-    btn.textContent = "내비 시작";
-    btn.className = "btn-main";
-    document.getElementById('instruction').innerText = "대기 중";
-    document.getElementById('distance').innerText = "";
-    document.getElementById('status-msg').innerText = "안내 종료됨";
+    // heading(각도) 방향으로 좌표 이동
+    // 위도(y): cos, 경도(x): sin
+    const rad = (heading * Math.PI) / 180;
+    
+    // 북쪽이 0도라 가정하고 좌표계에 맞춤 (지도 상 북쪽 = Lat 증가)
+    // 실제로는 좌표계 변환이 복잡하지만, 여기선 단순화
+    // heading 0도(북) -> y감소? 화면상 위쪽이 북쪽이면 lat 증가
+    // 스마트폰 나침반: 0=북, 90=동, 180=남, 270=서
+    
+    // lat(위도)는 y축 방향, lon(경도)는 x축 방향
+    userPos.lat += Math.cos(rad) * STEP_LENGTH; 
+    userPos.lon += Math.sin(rad) * STEP_LENGTH;
+
+    checkArrival();
 }
 
-// 초기 위치 잡기 (Offset 설정)
-function initPosition(pos) {
-    // 사용자가 선택한 '출발지'를 현재 실제 GPS 좌표의 0점으로 잡음
-    const startNode = AREAS[route[0]];
-    startOffset = {
-        lat: pos.coords.latitude - startNode.lat,
-        lon: pos.coords.longitude - startNode.lon
-    };
+function checkArrival() {
+    const targetKey = route[route.length-1];
+    const target = AREAS[targetKey];
     
-    // 현재 위치 초기화
-    rawPos = { lat: startNode.lat, lon: startNode.lon };
-    currentPos = { lat: startNode.lat, lon: startNode.lon };
+    // 거리 계산
+    const dLat = (userPos.lat - target.lat);
+    const dLon = (userPos.lon - target.lon);
+    const dist = Math.sqrt(dLat*dLat + dLon*dLon) / 0.00001; // 대략 m 환산
+
+    document.getElementById('dist').innerText = `목적지까지 ${dist.toFixed(0)}m`;
     
-    document.getElementById('status-msg').innerHTML = "<span class='text-green-400'>GPS 신호 연결됨. 이동하세요!</span>";
-}
-
-// 위치 업데이트 (필터링 적용)
-function updatePosition(pos) {
-    if (!watching || !startOffset) return;
-
-    // 1. 보정된 목표 위치 계산
-    const targetLat = pos.coords.latitude - startOffset.lat;
-    const targetLon = pos.coords.longitude - startOffset.lon;
-    
-    // 디버그
-    document.getElementById('debug').innerText = `Acc: ${pos.coords.accuracy.toFixed(1)}m`;
-
-    // 2. 노이즈 필터링 (Deadzone)
-    // 이전 rawPos와 거리가 2m 미만이면 무시 (제자리 떨림 방지)
-    if (rawPos) {
-        const d = distInMeters(rawPos.lat, rawPos.lon, targetLat, targetLon);
-        if (d < 2.0) return; // 너무 작은 움직임은 무시
-    }
-
-    // 목표 위치 갱신
-    rawPos = { lat: targetLat, lon: targetLon };
-    
-    // 안내 갱신
-    checkProgress(targetLat, targetLon);
-}
-
-function onError(e) {
-    document.getElementById('status-msg').innerHTML = "<span class='text-red-500'>GPS 신호 약함 (야외로 나가세요)</span>";
-}
-
-// 나침반 핸들러
-function handleOrientation(e) {
-    if(e.alpha !== null) {
-        // 안드로이드는 e.alpha가 0~360, iOS는 webkitCompassHeading 사용
-        let heading = e.webkitCompassHeading || (360 - e.alpha);
-        targetHeading = heading;
+    if(dist < 5) {
+        document.getElementById('instr').innerText = "도착 완료! 🎉";
+        isNavigating = false;
     }
 }
 
-// ==========================================
-// 5. 애니메이션 루프 (부드러운 움직임 핵심)
-// ==========================================
+// --- 그리기 루프 ---
 function animate() {
-    // 1. 위치 보간 (Linear Interpolation)
-    // currentPos를 rawPos로 천천히 이동시킴 (순간이동 방지)
-    if (rawPos && currentPos) {
-        const lerpFactor = 0.05; // 작을수록 부드럽지만 반응이 느림
-        currentPos.lat += (rawPos.lat - currentPos.lat) * lerpFactor;
-        currentPos.lon += (rawPos.lon - currentPos.lon) * lerpFactor;
-    }
-
-    // 2. 회전 보간 (Smoothing)
-    let delta = targetHeading - currentHeading;
-    while(delta < -180) delta += 360;
-    while(delta > 180) delta -= 360;
-    // 3도 이하의 미세한 회전은 무시 (떨림 방지)
-    if (Math.abs(delta) > 3) {
-        currentHeading += delta * 0.05; 
-    }
-
-    draw();
-    requestAnimationFrame(animate);
-}
-
-// ==========================================
-// 6. 그리기 (Canvas)
-// ==========================================
-function draw() {
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = "black";
     ctx.fillRect(0,0,canvas.width, canvas.height);
 
-    if (!currentPos) {
-        ctx.fillStyle = "#333";
-        ctx.textAlign = "center";
-        ctx.fillText("GPS 대기중...", canvas.width/2, canvas.height/2);
+    if(!userPos) {
+        requestAnimationFrame(animate);
         return;
     }
 
-    // 좌표 변환 함수 (currentPos가 화면 중심)
+    const SCALE = 3000000;
+    const cx = canvas.width/2; 
+    const cy = canvas.height * 0.6;
+
+    // 변환 함수 (내 위치가 항상 중앙)
     const toScreen = (lat, lon) => {
-        let dy = (lat - currentPos.lat) * MAP_SCALE;
-        let dx = (lon - currentPos.lon) * MAP_SCALE; 
+        let dy = (lat - userPos.lat) * SCALE;
+        let dx = (lon - userPos.lon) * SCALE;
         
-        // 회전 적용
-        const rad = -currentHeading * Math.PI / 180;
+        // 화면 회전 (내가 보는 방향이 항상 위쪽)
+        const rad = -heading * Math.PI / 180;
         const rx = dx * Math.cos(rad) - (-dy) * Math.sin(rad);
         const ry = dx * Math.sin(rad) + (-dy) * Math.cos(rad);
-
-        return { x: canvas.width/2 + rx, y: canvas.height * 0.65 + ry };
+        
+        return {x: cx + rx, y: cy + ry}; // y축 반전 없음 (단순화)
     };
 
-    // 경로 선 그리기
-    if (route) {
-        ctx.lineCap = "round"; ctx.lineJoin = "round";
-        
-        // 외곽선 (Glow 효과)
-        ctx.strokeStyle = "rgba(59, 130, 246, 0.3)";
-        ctx.lineWidth = 40;
-        ctx.beginPath();
-        route.forEach((node, i) => {
-            const p = toScreen(AREAS[node].lat, AREAS[node].lon);
-            if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-        });
-        ctx.stroke();
-
-        // 중심선
-        ctx.strokeStyle = "#60a5fa"; // Blue 400
-        ctx.lineWidth = 6;
-        ctx.stroke();
-    }
-
-    // 노드(지점) 그리기
+    // 경로 그리기
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 20;
+    ctx.beginPath();
+    Object.keys(AREAS).forEach((k, i) => {
+        const p = toScreen(AREAS[k].lat, AREAS[k].lon);
+        if(i==0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+    
+    // 노드
     Object.keys(AREAS).forEach(k => {
         const p = toScreen(AREAS[k].lat, AREAS[k].lon);
-        
-        // 점
-        ctx.fillStyle = "#1e293b";
+        ctx.fillStyle = "#555";
         ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
-        
-        // 텍스트
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = "bold 14px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(AREAS[k].name, p.x, p.y - 15);
+        ctx.fillStyle = "#fff"; ctx.textAlign="center"; 
+        ctx.fillText(AREAS[k].name, p.x, p.y-15);
     });
 
-    // 내 화살표 (항상 화면 중심)
-    const cx = canvas.width/2;
-    const cy = canvas.height * 0.65;
-    
-    // 시야각
-    const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, 120);
-    grad.addColorStop(0, "rgba(255,255,255,0.1)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, 120, -Math.PI/2 - 0.6, -Math.PI/2 + 0.6);
-    ctx.fill();
+    // 내 화살표 (중앙 고정)
+    ctx.save();
+    ctx.translate(cx, cy);
+    // 맵을 돌렸으므로 화살표는 고정
+    ctx.fillStyle = "#00ffff";
+    ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(-10,10); ctx.lineTo(0,5); ctx.lineTo(10,10); ctx.fill();
+    ctx.restore();
 
-    // 테슬라 스타일 화살표
-    ctx.fillStyle = "#fff"; 
-    ctx.shadowBlur = 10; ctx.shadowColor = "rgba(255,255,255,0.5)";
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 18); // 머리
-    ctx.lineTo(cx - 10, cy + 12); // 왼쪽 끝
-    ctx.lineTo(cx, cy + 8);   // 오목한 곳
-    ctx.lineTo(cx + 10, cy + 12); // 오른쪽 끝
-    ctx.fill();
-    ctx.shadowBlur = 0;
-}
-
-// ==========================================
-// 7. 유틸리티 (거리 계산, 길찾기)
-// ==========================================
-function checkProgress(lat, lon) {
-    if (!route) return;
-    
-    // 다음 목표 지점과의 거리 계산
-    // 현재 route[0]이 출발지라고 가정하고, 다음 경유지를 찾음
-    // 간단화를 위해 가장 가까운 노드를 찾아서 안내 메시지 갱신
-    
-    let minDist = Infinity;
-    let closestNode = null;
-    
-    route.forEach(nodeKey => {
-        const node = AREAS[nodeKey];
-        const d = distInMeters(lat, lon, node.lat, node.lon);
-        if (d < minDist) { minDist = d; closestNode = nodeKey; }
-    });
-
-    if (closestNode) {
-        const idx = route.indexOf(closestNode);
-        if (idx < route.length - 1) {
-            const nextNode = AREAS[route[idx+1]];
-            const d = distInMeters(lat, lon, nextNode.lat, nextNode.lon);
-            document.getElementById('instruction').innerHTML = `${nextNode.name} 방향으로`;
-            document.getElementById('distance').innerText = `${d.toFixed(0)}m 남음`;
-        } else {
-             if (minDist < 10) { // 도착지 10m 이내
-                document.getElementById('instruction').innerText = "도착 완료!";
-                document.getElementById('distance').innerText = "";
-             } else {
-                document.getElementById('instruction').innerText = "목적지 부근";
-                document.getElementById('distance').innerText = `${minDist.toFixed(0)}m 남음`;
-             }
-        }
-    }
-}
-
-function distInMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-function findPath(start, end) {
-    let q = [[start]];
-    let visited = new Set();
-    while(q.length > 0) {
-        let path = q.shift();
-        let node = path[path.length-1];
-        if(node === end) return path;
-        if(visited.has(node)) continue;
-        visited.add(node);
-        
-        let neighbors = [];
-        EDGES.forEach(e => {
-            if(e.u === node) neighbors.push(e.v);
-            if(e.v === node) neighbors.push(e.u);
-        });
-        neighbors.forEach(next => { if(!visited.has(next)) q.push([...path, next]); });
-    }
-    return null;
+    requestAnimationFrame(animate);
 }
 </script>
 </body>
