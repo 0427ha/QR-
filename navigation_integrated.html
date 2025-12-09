@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>Runner's High Smart Nav</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+    body { background: #000; color: white; margin:0; overflow: hidden; touch-action: none; font-family: -apple-system, sans-serif; }
+    
+    #map-canvas { width:100%; height:70vh; background:#111; border-radius:0 0 30px 30px; }
+    
+    .overlay { position: absolute; top: 20px; left:0; right:0; text-align: center; z-index: 10; pointer-events: none; }
+    
+    .bottom-panel { 
+        position: absolute; bottom: 0; left:0; right:0; height: 30vh; 
+        background: #000; padding: 15px; display: flex; flex-direction: column; 
+        border-top: 1px solid #333; z-index: 20;
+    }
+    
+    .btn-start { 
+        background: #3b82f6; color: white; border:none; padding: 12px; 
+        font-size: 1.1rem; font-weight: 800; border-radius: 12px; width: 100%; 
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); margin-top: auto; 
+        transition: all 0.2s;
+    }
+    .btn-start.active { background: #ef4444; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+
+    .calib-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .calib-btn {
+        flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #444;
+        background: #222; color: #ccc; font-size: 0.75rem; font-weight: bold;
+    }
+    .calib-btn.active { background: #059669; color: white; border-color: #059669; }
+
+    .step-badge {
+        position: absolute; top: 20px; right: 20px;
+        background: rgba(30, 41, 59, 0.8); border: 1px solid #334155;
+        padding: 6px 12px; border-radius: 99px; font-size: 0.8rem; font-weight: bold; color: #94a3b8;
+    }
+
+    .ws-status {
+        position: absolute; top: 20px; left: 20px;
+        font-size: 0.8rem; color: #64748b; font-weight: bold;
+    }
+    .ws-status.connected { color: #22c55e; }
+    
+    #toast {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.9); border: 1px solid #ef4444;
+        color: white; padding: 20px; border-radius: 12px;
+        text-align: center; z-index: 100; display: none;
+        box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
+    }
+    </style>
+</head>
+<body>
+
+<div class="ws-status" id="ws-status">🔴 Disconnected</div>
+<div class="step-badge">👣 <span id="step-count">0</span></div>
+
+<div id="toast">
+    <div class="text-2xl mb-2">⚠️</div>
+    <div id="toast-msg" class="font-bold text-lg"></div>
+</div>
+
+<div class="overlay">
+    <div id="instr" class="text-3xl font-black text-cyan-400 drop-shadow-md">경로 미리보기</div>
+    <div id="dist" class="text-xl text-gray-400 mt-1 font-mono"></div>
+</div>
+
+<canvas id="map-canvas"></canvas>
+
+<div class="bottom-panel">
+    <div class="calib-row">
+        <button id="btn-rot" class="calib-btn">🔄 지도 회전 반전</button>
+        <button id="btn-move" class="calib-btn">⬆️ 이동 방향 반전</button>
+    </div>
+
+    <div class="flex gap-2 mb-2">
+        <select id="start" onchange="updatePreview()" class="bg-gray-800 text-white p-2 rounded-lg flex-1 font-bold border border-gray-700 text-sm"></select>
+        <select id="end" onchange="updatePreview()" class="bg-gray-800 text-white p-2 rounded-lg flex-1 font-bold border border-gray-700 text-sm"></select>
+    </div>
+    
+    <div class="text-center text-gray-500 text-[10px] mb-1">
+        내비 시작 시 <b>혼잡도 기반 자동 우회</b>가 작동합니다.
+    </div>
+
+    <button id="btn" class="btn-start">내비 시작</button>
+</div>
+
+<script>
+// ========== 설정 (🔴 본인 IP로 변경하세요!) ==========
+const WS_IP = "220.69.20.130"; 
+const WS_PORT = "8000";
+const STEP_LENGTH = 0.000020; 
+const BASE_LAT = 37.0; 
+const BASE_LON = 127.0;
+const GAP = 0.00015; 
+
+// 지도 데이터
+const AREAS = {
+    S: {name:"현위치(입구)", lat:BASE_LAT, lon:BASE_LON}, 
+    A: {name:"게이트 A", lat:BASE_LAT + GAP, lon:BASE_LON - GAP, cam_id: 1}, 
+    B: {name:"게이트 B", lat:BASE_LAT + GAP, lon:BASE_LON + GAP, cam_id: 2} 
+};
+
+const EDGES = [ ['S','A'], ['S','B'], ['A','B'] ];
+
+// 실시간 데이터
+let gateStatus = {
+    A: { count: 0, congested: false },
+    B: { count: 0, congested: false }
+};
+const DANGER_THRESHOLD = 4;
+
+let userPos = null; 
+let heading = 0;    
+let currentStepCount = 0;
+let isNavigating = false; 
+let path = []; 
+let canvas, ctx;
+let rotDir = -1;  
+let moveDir = 1;  
+let lastStepTime = 0;
+let cameraCenter = { lat: BASE_LAT, lon: BASE_LON };
+let wsConnected = false; // ✅ 추가: 실제 연결 상태
+
+// ========== 초기화 ==========
+window.onload = () => {
+    canvas = document.getElementById('map-canvas');
+    ctx = canvas.getContext('2d');
+    
+    const s = document.getElementById('start');
+    const e = document.getElementById('end');
+    
+    Object.keys(AREAS).forEach(k => {
+        const opt = `<option value="${k}">[${k}] ${AREAS[k].name}</option>`;
+        s.innerHTML += opt; 
+        e.innerHTML += opt;
+    });
+    
+    s.value = "S"; 
+    e.value = "A";
+
+    // QR 코드 파라미터 처리
+    const urlParams = new URLSearchParams(window.location.search);
+    const destParam = urlParams.get('dest');
+    if (destParam && AREAS[destParam]) {
+        e.value = destParam;
+        console.log("✅ QR Code Detected: Destination = " + destParam);
+    }
+
+    document.getElementById('btn').onclick = toggleNav;
+    
+    const btnRot = document.getElementById('btn-rot');
+    const btnMove = document.getElementById('btn-move');
+    btnRot.onclick = () => { rotDir *= -1; btnRot.classList.toggle('active'); };
+    btnMove.onclick = () => { moveDir *= -1; btnMove.classList.toggle('active'); };
+
+    window.addEventListener('resize', resize);
+    resize();
+    connectWebSocket();
+    updatePreview(); 
+    animate();
+};
+
+// ========== 웹소켓 연결 (✅ 수정됨!) ==========
+function connectWebSocket() {
+    const wsUrl = `ws://${WS_IP}:${WS_PORT}/ws/stream`;
+    const statusEl = document.getElementById('ws-status');
+    
+    console.log("🔌 Connecting to " + wsUrl);
+    
+    try {
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            wsConnected = true; // ✅ 진짜 연결됨!
+            statusEl.innerText = "🟢 LIVE DATA";
+            statusEl.classList.add("connected");
+            console.log("✅ WebSocket Connected");
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log("📦 Received:", data);
+                
+                if (data.cam_id === 1) updateGateStatus('A', data.people);
+                if (data.cam_id === 2) updateGateStatus('B', data.people);
+            } catch (e) { 
+                console.error("❌ Parse Error:", e); 
+            }
+        };
+
+        ws.onclose = () => {
+            wsConnected = false; // ✅ 연결 끊김
+            statusEl.innerText = "🔴 Disconnected";
+            statusEl.classList.remove("connected");
+            console.log("⚠️ WebSocket Disconnected. Reconnecting...");
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = (error) => {
+            wsConnected = false; // ✅ 연결 실패
+            statusEl.innerText = "🔴 Connection Failed";
+            statusEl.classList.remove("connected");
+            console.error("❌ WebSocket Error:", error);
+        };
+    } catch (error) {
+        wsConnected = false;
+        statusEl.innerText = "🔴 Server Not Found";
+        console.error("❌ Cannot create WebSocket:", error);
+    }
+}
+
+function updateGateStatus(areaKey, count) {
+    gateStatus[areaKey].count = count;
+    gateStatus[areaKey].congested = (count >= DANGER_THRESHOLD);
+    console.log(`📊 Gate ${areaKey}: ${count}명 (혼잡: ${gateStatus[areaKey].congested})`);
+}
+
+// ========== 스마트 우회 로직 ==========
+function checkCongestionAndReroute() {
+    if (!wsConnected) {
+        console.log("⚠️ 서버 미연결 - 우회 기능 비활성화");
+        return false;
+    }
+    
+    const currentDest = document.getElementById('end').value;
+    
+    if (gateStatus[currentDest] && gateStatus[currentDest].congested) {
+        const altDest = (currentDest === 'A') ? 'B' : 'A';
+        
+        if (!gateStatus[altDest].congested) {
+            showToast(`⚠️ ${AREAS[currentDest].name} 혼잡!<br>쾌적한 ${AREAS[altDest].name}로<br>경로를 변경합니다.`);
+            document.getElementById('end').value = altDest;
+            updatePreview();
+            return true;
+        }
+    }
+    return false;
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toast-msg').innerHTML = msg;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.70;
+}
+
+// ========== 경로 미리보기 ==========
+function updatePreview() {
+    const startNode = document.getElementById('start').value;
+    const endNode = document.getElementById('end').value;
+    
+    path = findShortestPath(startNode, endNode);
+    userPos = {...AREAS[startNode]}; 
+    
+    if (path) {
+        const sP = AREAS[startNode];
+        const eP = AREAS[endNode];
+        cameraCenter = { lat: (sP.lat + eP.lat) / 2, lon: (sP.lon + eP.lon) / 2 };
+        
+        if(!isNavigating) {
+            document.getElementById('instr').innerText = "경로 미리보기";
+            const dist = getDist(sP, eP);
+            document.getElementById('dist').innerText = `예상 거리 약 ${dist.toFixed(0)}m`;
+        }
+    }
+}
+
+// ========== 내비게이션 토글 ==========
+function toggleNav() {
+    if (isNavigating) {
+        isNavigating = false;
+        document.getElementById('btn').innerText = "내비 시작";
+        document.getElementById('btn').classList.remove('active');
+        document.getElementById('instr').innerText = "안내 종료";
+        location.reload(); 
+    } else {
+        checkCongestionAndReroute();
+
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission()
+                .then(res => { 
+                    if (res === 'granted') {
+                        console.log("✅ Motion Permission Granted");
+                        initSensors();
+                    } else {
+                        alert("센서 권한이 필요합니다.");
+                    }
+                })
+                .catch(err => {
+                    console.error("❌ Permission Error:", err);
+                    alert("센서 권한 요청 실패");
+                });
+        } else {
+            initSensors();
+        }
+        
+        isNavigating = true;
+        currentStepCount = 0;
+        document.getElementById('btn').innerText = "안내 종료";
+        document.getElementById('btn').classList.add('active');
+        updateStatus(); 
+    }
+}
+
+// ========== 센서 초기화 ==========
+function initSensors() {
+    console.log("🎯 Initializing Sensors...");
+    
+    window.addEventListener('deviceorientation', e => {
+        if(e.webkitCompassHeading) {
+            heading = e.webkitCompassHeading;
+        } else if(e.alpha !== null) {
+            heading = 360 - e.alpha;
+        }
+    });
+
+    window.addEventListener('devicemotion', e => {
+        if(!isNavigating) return;
+        
+        const acc = e.accelerationIncludingGravity;
+        if(!acc) return;
+        
+        const total = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+        
+        if (total > 12.5) { 
+            const now = Date.now();
+            if (now - lastStepTime > 450) { 
+                takeStep(); 
+                lastStepTime = now;
+            }
+        }
+    });
+    
+    console.log("✅ Sensors Initialized");
+}
+
+function takeStep() {
+    currentStepCount++;
+    document.getElementById('step-count').innerText = currentStepCount;
+    
+    const rad = (heading * Math.PI) / 180;
+    userPos.lat += moveDir * Math.cos(rad) * STEP_LENGTH; 
+    userPos.lon += moveDir * Math.sin(rad) * STEP_LENGTH;
+    
+    console.log(`👣 Step ${currentStepCount}`);
+    updateStatus();
+}
+
+function updateStatus() {
+    if(!path || path.length === 0) return;
+    
+    let minDist = Infinity; 
+    let nearestIdx = -1;
+    
+    path.forEach((node, i) => {
+        const d = getDist(userPos, AREAS[node]);
+        if(d < minDist) { minDist = d; nearestIdx = i; }
+    });
+    
+    const endNode = AREAS[path[path.length-1]];
+    const distToEnd = getDist(userPos, endNode);
+    
+    if (distToEnd < 5) {
+        document.getElementById('instr').innerText = "도착 완료!";
+        document.getElementById('dist').innerText = "";
+        isNavigating = false;
+        document.getElementById('btn').innerText = "내비 시작";
+        document.getElementById('btn').classList.remove('active');
+        return;
+    }
+    
+    let targetIdx = nearestIdx + 1;
+    if (targetIdx >= path.length) targetIdx = path.length - 1;
+    
+    document.getElementById('instr').innerText = `${AREAS[path[targetIdx]].name} 방향`;
+    document.getElementById('dist').innerText = `남은 거리 ${distToEnd.toFixed(0)}m`;
+}
+
+// ========== 경로 탐색 ==========
+function findShortestPath(start, end) {
+    const adj = {};
+    EDGES.forEach(([u, v]) => {
+        if(!adj[u]) adj[u] = []; 
+        if(!adj[v]) adj[v] = [];
+        adj[u].push(v); 
+        adj[v].push(u);
+    });
+    
+    let queue = [[start]]; 
+    let visited = new Set([start]);
+    
+    while(queue.length > 0) {
+        let path = queue.shift();
+        if(path[path.length-1] === end) return path;
+        
+        let node = path[path.length-1];
+        if(adj[node]) {
+            for(let neighbor of adj[node]) {
+                if(!visited.has(neighbor)) {
+                    visited.add(neighbor); 
+                    queue.push([...path, neighbor]);
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function getDist(p1, p2) {
+    const dLat = p1.lat - p2.lat; 
+    const dLon = p1.lon - p2.lon;
+    return Math.sqrt(dLat*dLat + dLon*dLon) / 0.000009; 
+}
+
+// ========== 애니메이션 렌더링 ==========
+function animate() {
+    ctx.fillStyle = "#000"; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    if(!userPos) { 
+        requestAnimationFrame(animate); 
+        return; 
+    }
+
+    const SCALE = 2200000; 
+    const cx = canvas.width / 2; 
+    const cy = canvas.height * 0.65; 
+
+    const centerPos = isNavigating ? userPos : cameraCenter;
+    const currentRot = isNavigating ? (rotDir * heading) : 0; 
+
+    const toScreen = (lat, lon) => {
+        let dy = (lat - centerPos.lat) * SCALE; 
+        let dx = (lon - centerPos.lon) * SCALE; 
+        
+        const rad = currentRot * Math.PI / 180;
+        const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
+        const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
+        
+        return {x: cx + rx, y: cy - ry}; 
+    };
+
+    // 격자 그리기
+    ctx.strokeStyle = "#333"; 
+    ctx.lineWidth = 4; 
+    ctx.beginPath();
+    EDGES.forEach(([u, v]) => {
+        const p1 = toScreen(AREAS[u].lat, AREAS[u].lon);
+        const p2 = toScreen(AREAS[v].lat, AREAS[v].lon);
+        ctx.moveTo(p1.x, p1.y); 
+        ctx.lineTo(p2.x, p2.y);
+    });
+    ctx.stroke();
+
+    // 경로 그리기
+    if (path && path.length > 0) {
+        ctx.strokeStyle = "rgba(0, 255, 255, 0.5)"; 
+        ctx.lineWidth = 25; 
+        ctx.beginPath();
+        for(let i=0; i<path.length-1; i++) {
+            const p1 = toScreen(AREAS[path[i]].lat, AREAS[path[i]].lon);
+            const p2 = toScreen(AREAS[path[i+1]].lat, AREAS[path[i+1]].lon);
+            ctx.moveTo(p1.x, p1.y); 
+            ctx.lineTo(p2.x, p2.y);
+        }
+        ctx.stroke();
+    }
+
+    // 노드 그리기
+    Object.keys(AREAS).forEach(k => {
+        const p = toScreen(AREAS[k].lat, AREAS[k].lon);
+        const isDest = (path && path[path.length-1] === k);
+        const isStart = (path && path[0] === k);
+        
+        let nodeColor = "#1e293b"; 
+        let labelColor = "#64748b";
+        let subText = "";
+
+        // ✅ 서버 연결 시에만 혼잡도 표시
+        if (wsConnected && (k === 'A' || k === 'B')) {
+            const status = gateStatus[k];
+            if (status.congested) {
+                nodeColor = "#ef4444"; 
+                labelColor = "#ef4444";
+                subText = `(혼잡: ${status.count}명)`;
+            } else {
+                nodeColor = "#10b981"; 
+                labelColor = "#10b981";
+                subText = `(원활: ${status.count}명)`;
+            }
+        } else if (isStart) {
+            nodeColor = "#3b82f6"; 
+        }
+
+        ctx.fillStyle = nodeColor;
+        ctx.beginPath(); 
+        ctx.arc(p.x, p.y, (k==='A'||k==='B')?18:10, 0, Math.PI*2); 
+        ctx.fill();
+        
+        ctx.fillStyle = (isDest||isStart||k==='A'||k==='B') ? "#fff" : "#64748b";
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "center"; 
+        ctx.fillText(AREAS[k].name, p.x, p.y-28);
+
+        if (subText) {
+            ctx.fillStyle = labelColor;
+            ctx.font = "12px sans-serif";
+            ctx.fillText(subText, p.x, p.y-45);
+        }
+    });
+
+    // 사용자 위치 표시
+    if(isNavigating) {
+        ctx.save(); 
+        ctx.translate(cx, cy);
+        
+        const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, 120);
+        grad.addColorStop(0, "rgba(255, 220, 0, 0.3)"); 
+        grad.addColorStop(1, "rgba(255, 220, 0, 0)");
+        ctx.fillStyle = grad; 
+        ctx.beginPath(); 
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 120, -Math.PI/2 - 0.5, -Math.PI/2 + 0.5); 
+        ctx.fill();
+        
+        ctx.fillStyle = "#fff"; 
+        ctx.shadowBlur = 10; 
+        ctx.shadowColor = "white";
+        ctx.beginPath(); 
+        ctx.moveTo(0, -18); 
+        ctx.lineTo(-12, 12); 
+        ctx.lineTo(0, 8); 
+        ctx.lineTo(12, 12); 
+        ctx.fill();
+        ctx.restore();
+    } else {
+        const p = toScreen(userPos.lat, userPos.lon);
+        ctx.fillStyle = "#00ffff"; 
+        ctx.beginPath(); 
+        ctx.arc(p.x, p.y, 8, 0, Math.PI*2); 
+        ctx.fill();
+    }
+
+    requestAnimationFrame(animate);
+}
+</script>
+</body>
+</html>
